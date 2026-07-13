@@ -1,0 +1,2771 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI生成工具 - 多窗口版</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16162a 100%);
+            border-bottom: 1px solid #2a2a3e;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            z-index: 100;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 200%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(210, 212, 218, 0.06), transparent);
+            animation: headerShimmer 8s infinite linear;
+        }
+
+        @keyframes headerShimmer {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(50%); }
+        }
+
+        .header h1 {
+            font-size: 20px;
+            color: #fff;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .credits-badge {
+            background: linear-gradient(135deg, #c8cad0 0%, #9da1aa 100%);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            animation: badgePulse 2s infinite ease-in-out;
+        }
+
+        @keyframes badgePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(210, 212, 218, 0.28); }
+            50% { box-shadow: 0 0 0 8px rgba(210, 212, 218, 0); }
+        }
+
+        .btn-new-window {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #c8cad0 0%, #9da1aa 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .btn-new-window:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(210, 212, 218, 0.16);
+        }
+
+        .btn-new-window:active {
+            transform: translateY(0);
+        }
+
+        .settings-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: #2a2a3e;
+            border: none;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .settings-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .settings-btn:hover::before {
+            width: 100px;
+            height: 100px;
+        }
+
+        .settings-btn:hover {
+            background: #3a3a4e;
+            transform: scale(1.05);
+        }
+
+        .desktop {
+            position: relative;
+            width: calc(100% - 280px);
+            height: calc(100vh - 65px);
+            overflow: hidden;
+        }
+
+        .window {
+            position: absolute;
+            background: #16162a;
+            border: 1px solid #3a3a4e;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            min-width: 400px;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease;
+            animation: windowAppear 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes windowAppear {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .window.active {
+            box-shadow: 0 25px 70px rgba(210, 212, 218, 0.12);
+        }
+
+        .window.maximized {
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 0;
+        }
+
+        .window.minimized {
+            display: none;
+        }
+
+        .window-titlebar {
+            background: #1a1a2e;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: move;
+            user-select: none;
+            border-bottom: 1px solid #2a2a3e;
+        }
+
+        .window-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            flex: 1;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .window-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: #2a2a3e;
+            border: none;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .window-btn:hover {
+            background: #3a3a4e;
+            transform: scale(1.1);
+        }
+
+        .window-btn.close:hover {
+            background: #ef4444;
+            color: white;
+        }
+
+        .window-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .window-resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            cursor: nwse-resize;
+            background: linear-gradient(135deg, transparent 50%, #3a3a4e 50%);
+            transition: background 0.3s;
+        }
+
+        .window-resize-handle:hover {
+            background: linear-gradient(135deg, transparent 50%, #c8cad0 50%);
+        }
+
+        .section {
+            margin-bottom: 24px;
+            animation: fadeInUp 0.5s ease forwards;
+            opacity: 0;
+        }
+
+        .section:nth-child(1) { animation-delay: 0.1s; }
+        .section:nth-child(2) { animation-delay: 0.15s; }
+        .section:nth-child(3) { animation-delay: 0.2s; }
+        .section:nth-child(4) { animation-delay: 0.25s; }
+        .section:nth-child(5) { animation-delay: 0.3s; }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .section-title {
+            font-size: 14px;
+            color: #9ca3af;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .upload-area {
+            border: 2px dashed #3a3a4e;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #1a1a2e;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(210, 212, 218, 0.06) 0%, transparent 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .upload-area:hover::before,
+        .upload-area.drag-over::before {
+            opacity: 1;
+        }
+
+        .upload-area:hover, .upload-area.drag-over {
+            border-color: #c8cad0;
+            background: #1e1e32;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(210, 212, 218, 0.10);
+        }
+
+        .upload-area .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+            transition: transform 0.3s;
+        }
+
+        .upload-area:hover .icon {
+            transform: scale(1.1);
+        }
+
+        .upload-area .text {
+            color: #9ca3af;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            color: #e0e0e0;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #c8cad0;
+            background: #1e1e32;
+            box-shadow: 0 0 0 3px rgba(210, 212, 218, 0.10);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s ease, height 0.6s ease;
+        }
+
+        .btn:active::after {
+            width: 200px;
+            height: 200px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #c8cad0 0%, #9da1aa 100%);
+            color: white;
+            width: 100%;
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease infinite;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(210, 212, 218, 0.16);
+        }
+
+        .btn-secondary {
+            background: #2a2a3e;
+            color: #e0e0e0;
+            width: 100%;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #3a3a4e;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-toggle {
+            background: #2a2a3e;
+            color: #9ca3af;
+            flex: 1;
+        }
+
+        .btn-toggle.active {
+            background: linear-gradient(135deg, #c8cad0 0%, #9da1aa 100%);
+            color: white;
+        }
+
+        .size-selector {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .size-btn {
+            padding: 12px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            color: #9ca3af;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .size-btn.active {
+            background: linear-gradient(135deg, rgba(240, 241, 244, 0.30) 0%, rgba(168, 171, 178, 0.24) 100%);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.72);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18) inset, 0 8px 22px rgba(0, 0, 0, 0.18);
+        }
+
+        .size-btn:hover:not(.active) {
+            border-color: #c8cad0;
+            transform: translateY(-2px);
+        }
+
+        .size-btn.disabled,
+        .size-btn.disabled:hover {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+            border-color: #2a2a3e;
+        }
+
+        .ratio-selector {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .ratio-btn {
+            padding: 8px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            color: #9ca3af;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 12px;
+        }
+
+        .ratio-btn.active {
+            background: #c8cad0;
+            color: white;
+            border-color: transparent;
+        }
+
+        .ratio-btn:hover:not(.active) {
+            border-color: #c8cad0;
+        }
+
+        .ref-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .ref-item {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            animation: fadeInScale 0.3s ease forwards;
+        }
+
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .ref-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s;
+        }
+
+        .ref-item:hover img {
+            transform: scale(1.1);
+        }
+
+        .ref-item.uploading img,
+        .ref-item.failed img {
+            filter: brightness(0.55);
+        }
+
+        .ref-item.failed {
+            border-color: rgba(239, 68, 68, 0.8);
+        }
+
+        .ref-status {
+            position: absolute;
+            left: 6px;
+            right: 6px;
+            bottom: 6px;
+            z-index: 2;
+            min-height: 20px;
+            padding: 3px 6px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.62);
+            color: #fff;
+            font-size: 11px;
+            line-height: 1.25;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .ref-item.ready .ref-status {
+            left: auto;
+            right: 6px;
+            bottom: 6px;
+            width: auto;
+            min-height: 18px;
+            padding: 2px 5px;
+            background: rgba(34, 197, 94, 0.88);
+            font-size: 10px;
+        }
+
+        .ref-item.failed .ref-status {
+            background: rgba(239, 68, 68, 0.92);
+        }
+
+        .ref-item .remove-btn {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: all 0.3s;
+            transform: scale(0.8);
+        }
+
+        .ref-item:hover .remove-btn {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .task-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .result-thumb {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            position: relative;
+        }
+
+        .result-thumb:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .result-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            animation: imageFadeIn 0.5s ease;
+        }
+
+        @keyframes imageFadeIn {
+            from {
+                opacity: 0;
+                filter: blur(10px);
+            }
+            to {
+                opacity: 1;
+                filter: blur(0);
+            }
+        }
+
+        .result-thumb.loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16162a 100%);
+        }
+
+        .result-thumb.loading::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* 旋转加载动画 */
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #2a2a3e;
+            border-top-color: #c8cad0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 成功动画 */
+        .success-checkmark {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: successBounce 0.5s ease;
+        }
+
+        .success-checkmark::after {
+            content: '✓';
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        @keyframes successBounce {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* 失败动画 */
+        .failed-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: failShake 0.5s ease;
+        }
+
+        .failed-icon::after {
+            content: '✕';
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        @keyframes failShake {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-10deg); }
+            75% { transform: rotate(10deg); }
+        }
+
+        .task-progress {
+            width: 100%;
+            height: 6px;
+            background: #1a1a2e;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+
+        .task-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #c8cad0 0%, #9da1aa 50%, #c8cad0 100%);
+            background-size: 200% 100%;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: progressStripe 1s linear infinite;
+        }
+
+        @keyframes progressStripe {
+            0% { background-position: 200% 0; }
+            100% { background-position: 0 0; }
+        }
+
+        .task-info {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 12px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(8px);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+            transform: scale(0.9);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .modal.active .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-content img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: -50px;
+            right: 0;
+            background: white;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .modal-close:hover {
+            background: #f0f0f0;
+            transform: scale(1.05);
+        }
+
+        .settings-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 3000;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .settings-modal.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .settings-content {
+            background: #16162a;
+            border: 1px solid #2a2a3e;
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            transform: scale(0.9) translateY(20px);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .settings-modal.active .settings-content {
+            transform: scale(1) translateY(0);
+        }
+
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .settings-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .close-settings {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: #2a2a3e;
+            border: none;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.3s;
+        }
+
+        .close-settings:hover {
+            background: #ef4444;
+            color: white;
+            transform: rotate(90deg);
+        }
+
+        .settings-section {
+            margin-bottom: 24px;
+        }
+
+        .settings-section-title {
+            font-size: 14px;
+            color: #9ca3af;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-group .form-input {
+            flex: 1;
+        }
+
+        .count-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .count-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .count-btn:hover {
+            background: #2a2a3e;
+            border-color: #c8cad0;
+        }
+
+        .count-btn:active {
+            transform: scale(0.95);
+        }
+
+        .count-input {
+            width: 60px;
+            text-align: center;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            color: #e0e0e0;
+            padding: 8px;
+            border-radius: 6px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #16162a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3a3a4e;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a4a5e;
+        }
+
+        /* Toast 提示样式 */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 300px;
+            padding: 12px 24px;
+            color: white;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9999;
+            animation: toastSlideIn 0.3s ease, toastFadeOut 0.3s ease 2.7s forwards;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        @keyframes toastSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes toastFadeOut {
+            to {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+        }
+
+        /* 生成按钮加载状态 */
+        .btn.loading {
+            pointer-events: none;
+        }
+
+        .btn.loading .btn-text {
+            opacity: 0;
+        }
+
+        .btn.loading::before {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        :root {
+            --bg: #141518;
+            --panel: rgba(42, 43, 47, 0.58);
+            --panel-strong: rgba(56, 57, 62, 0.74);
+            --line: rgba(255, 255, 255, 0.14);
+            --line-strong: rgba(255, 255, 255, 0.28);
+            --text: #f2f3f5;
+            --muted: #a8abb2;
+            --brand: #d7d9de;
+            --brand-2: #9da1aa;
+            --accent: #c9ccd3;
+            --danger: #ff6b7a;
+            --shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+        }
+
+        body {
+            background:
+                radial-gradient(circle at 16% 8%, rgba(255, 255, 255, 0.16), transparent 28%),
+                radial-gradient(circle at 78% 18%, rgba(176, 180, 188, 0.12), transparent 28%),
+                linear-gradient(135deg, #15161a 0%, #24262b 46%, #18191d 100%);
+            color: var(--text);
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+            background-size: 42px 42px;
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent 82%);
+            z-index: 0;
+        }
+
+        .header,
+        .window,
+        .settings-content,
+        .modal-content {
+            backdrop-filter: blur(20px) saturate(145%);
+            -webkit-backdrop-filter: blur(20px) saturate(145%);
+        }
+
+        .header {
+            background: rgba(35, 36, 40, 0.58);
+            border-bottom: 1px solid var(--line);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+        }
+
+        .header::before {
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+        }
+
+        .header h1 {
+            color: var(--text);
+            letter-spacing: 0;
+        }
+
+        .btn-new-window,
+        .btn-primary,
+        .btn-toggle.active,
+        .size-btn.active,
+        .settings-btn,
+        .btn-secondary,
+        .btn-toggle,
+        .size-btn,
+        .ratio-btn,
+        .form-input,
+        .form-select,
+        .form-textarea,
+        .upload-area,
+        .count-control,
+        .count-btn,
+        .count-input {
+            background: rgba(255, 255, 255, 0.055);
+            border-color: var(--line);
+            color: var(--text);
+        }
+
+        .settings-btn:hover,
+        .btn-secondary:hover:not(:disabled),
+        .btn-toggle:hover {
+            background: rgba(255, 255, 255, 0.095);
+        }
+
+        .desktop {
+            width: 100%;
+            height: calc(100vh - 65px);
+        }
+
+        .window {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+        }
+
+        .window.active {
+            border-color: var(--line-strong);
+            box-shadow: 0 28px 88px rgba(255, 255, 255, 0.1), var(--shadow);
+        }
+
+        .window.snapping {
+            transition: left 0.08s ease, top 0.08s ease, width 0.08s ease, height 0.08s ease, box-shadow 0.2s ease;
+        }
+
+        .window-titlebar {
+            background: rgba(255, 255, 255, 0.055);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .window-title::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            margin-right: 8px;
+            border-radius: 999px;
+            background: #d7d9de;
+            box-shadow: 0 0 14px rgba(255, 255, 255, 0.42);
+        }
+
+        .window-btn {
+            background: rgba(255, 255, 255, 0.075);
+            color: var(--text);
+        }
+
+        .window-resize-handle {
+            background: linear-gradient(135deg, transparent 50%, rgba(215, 217, 222, 0.75) 50%);
+        }
+
+        .spinner {
+            border-color: rgba(255, 255, 255, 0.14) !important;
+            border-top-color: #e7e8ec !important;
+        }
+
+        .result-thumb.loading {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)) !important;
+            border-color: var(--line) !important;
+        }
+
+        .result-thumb.loading::before {
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent) !important;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(210, 212, 218, 0.38) !important;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(235, 236, 240, 0.58) !important;
+        }
+
+        .upload-area,
+        .ref-item,
+        .form-input,
+        .form-select,
+        .form-textarea,
+        .size-btn,
+        .ratio-btn,
+        .count-control,
+        .count-btn,
+        .count-input {
+            background: rgba(255, 255, 255, 0.055) !important;
+            border-color: var(--line) !important;
+            color: var(--text) !important;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border-color: rgba(255, 255, 255, 0.42) !important;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12) !important;
+        }
+
+        .upload-area:hover,
+        .upload-area.drag-over {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border-color: rgba(255, 255, 255, 0.36) !important;
+        }
+
+        .form-select option {
+            background: #26272c !important;
+            color: var(--text) !important;
+        }
+
+        .ratio-btn.active,
+        .size-btn.active {
+            background: linear-gradient(135deg, rgba(240, 241, 244, 0.30) 0%, rgba(168, 171, 178, 0.24) 100%) !important;
+            color: #ffffff !important;
+            border-color: rgba(255, 255, 255, 0.72) !important;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18) inset, 0 8px 22px rgba(0, 0, 0, 0.18) !important;
+        }
+
+        .ref-order-badge {
+            position: absolute !important;
+            top: 6px !important;
+            left: 6px !important;
+            z-index: 3 !important;
+            min-width: 22px;
+            height: 22px;
+            padding: 0 7px;
+            border-radius: 999px;
+            background: rgba(18, 19, 23, 0.78) !important;
+            border: 1px solid rgba(255, 255, 255, 0.30) !important;
+            color: #fff !important;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 20px;
+            text-align: center;
+            pointer-events: none;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .ref-item .remove-btn {
+            z-index: 4;
+        }
+
+        .gallery-content {
+            width: min(1120px, 94vw);
+            max-width: 1120px;
+            max-height: 86vh;
+        }
+
+        .gallery-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .gallery-filters {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .gallery-filter-btn {
+            min-width: 72px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.055);
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .gallery-filter-btn.active,
+        .gallery-filter-btn:hover {
+            border-color: rgba(255, 255, 255, 0.55);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 14px;
+        }
+
+        .gallery-empty {
+            padding: 48px 16px;
+            text-align: center;
+            color: var(--muted);
+            border: 1px dashed var(--line);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .gallery-card {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.055);
+        }
+
+        .gallery-card-image {
+            width: 100%;
+            aspect-ratio: 1;
+            background: rgba(0, 0, 0, 0.25);
+            cursor: pointer;
+        }
+
+        .gallery-card-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .gallery-card-body {
+            padding: 10px;
+        }
+
+        .gallery-card-title {
+            font-size: 12px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 6px;
+        }
+
+        .gallery-card-meta {
+            font-size: 11px;
+            color: var(--muted);
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .gallery-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+
+        .gallery-action-btn {
+            min-height: 30px;
+            border-radius: 6px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .gallery-action-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .gallery-action-btn.danger {
+            color: #ffb4bd;
+            border-color: rgba(255, 107, 122, 0.45);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 AI生成工具 - 多窗口版</h1>
+        <div class="header-actions">
+            <button class="btn-new-window" onclick="createNewWindow()">➕ 新建窗口</button>
+            <a href="/" style="display: none;">
+                <button class="settings-btn" title="单窗口版">📄</button>
+            </a>
+            <button class="settings-btn" onclick="openSettings()">⚙️</button>
+        </div>
+    </div>
+
+    <div class="desktop" id="desktop"></div>
+
+    <!-- 设置弹窗 -->
+    <div id="settingsModal" class="settings-modal">
+        <div class="settings-content" onclick="event.stopPropagation()">
+            <div class="settings-header">
+                <div class="settings-title">⚙️ 全局设置</div>
+                <button class="close-settings" onclick="closeSettings()">✕</button>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">🔑 API 配置</div>
+                <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <div class="input-group">
+                        <input type="password" class="form-input" id="apiKey" placeholder="请输入 API Key">
+                        <button class="btn btn-secondary" onclick="togglePassword('apiKey')" style="width: auto;">👁️</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">65535 API Key</label>
+                    <div class="input-group">
+                        <input type="password" class="form-input" id="apiKey65535" placeholder="请输入 65535 API Key">
+                        <button class="btn btn-secondary" onclick="togglePassword('apiKey65535')" style="width: auto;">👁️</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">🎯 模型配置</div>
+                <div id="modelConfigGroups" style="display: flex; flex-direction: column; gap: 16px;">
+                    <!-- 模型分组将由 JS 动态生成 -->
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="settings-section-title">📁 输出配置</div>
+                <div class="form-group">
+                    <label class="form-label">保存地址</label>
+                    <input type="text" class="form-input" id="outputDir" value="outputs" placeholder="输出文件夹路径">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">文件名前缀</label>
+                    <input type="text" class="form-input" id="filenamePrefix" value="grsai" placeholder="文件名前缀">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">并发限制</label>
+                    <input type="number" class="form-input" id="concurrentLimit" value="5" min="1" max="10">
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveSettings()">
+                💾 保存设置
+            </button>
+        </div>
+    </div>
+
+    <div id="imageModal" class="modal" onclick="closeImageModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeImageModal()">✕ 关闭</button>
+            <img id="modalImage" src="" alt="预览">
+        </div>
+    </div>
+
+    <script>
+        let windowCounter = 0;
+        let windows = {};
+        let activeWindowId = null;
+        let globalConfig = {};
+        const MAX_REFERENCE_IMAGE_SIZE = 30 * 1024 * 1024;
+        const MAX_REFERENCE_IMAGE_SIZE_MB = MAX_REFERENCE_IMAGE_SIZE / 1024 / 1024;
+        const UPLOAD_CONCURRENCY = 3;
+
+        function escapeHtml(value) {
+            return String(value || '').replace(/[&<>'"]/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[char]));
+        }
+
+        function getUploadImageUrl(path) {
+            if (!path) return '';
+            if (path.startsWith('blob:') || path.startsWith('data:') || path.startsWith('/')) return path;
+            if (path.includes('uploads')) return '/uploads/' + path.split(/[\\/]/).pop();
+            return '/uploads/' + path;
+        }
+
+        const AVAILABLE_MODELS = [
+            "gpt-image-2-65535",
+            "gpt-image-2-grsai",
+            "nano-banana-2",
+            "nano-banana-2-cl",
+            "nano-banana-2-2k-cl",
+            "nano-banana-2-4k-cl",
+            "nano-banana-pro"
+        ];
+        
+        const MODEL_LABELS = {
+            "nano-banana-2": "nano-banana-2[grsai]",
+            "nano-banana-2-cl": "nano-banana-2-cl[grsai]",
+            "nano-banana-2-2k-cl": "nano-banana-2-2k-cl[grsai]",
+            "nano-banana-2-4k-cl": "nano-banana-2-4k-cl[grsai]",
+            "nano-banana-pro": "nano-banana-pro[grsai]",
+            "gpt-image-2-grsai": "gpt-image-2[grsai]",
+            "gpt-image-2-65535": "gpt-image-2[65535]"
+        };
+
+        function getModelLabel(model) {
+            return MODEL_LABELS[model] || model;
+        }
+
+        const OPENAI_SIZE_MAP = {
+            '1:1': { '1K': '1024x1024', '2K': '2048x2048', '4K': '2880x2880' },
+            '16:9': { '1K': '1280x720', '2K': '2048x1152', '4K': '3840x2160' },
+            '9:16': { '1K': '720x1280', '2K': '1152x2048', '4K': '2160x3840' },
+            '4:3': { '1K': '1152x864', '2K': '2304x1728', '4K': '3264x2448' },
+            '3:4': { '1K': '864x1152', '2K': '1728x2304', '4K': '2448x3264' },
+            '3:2': { '1K': '1536x1024', '2K': '2048x1360', '4K': '3504x2336' },
+            '2:3': { '1K': '1024x1536', '2K': '1360x2048', '4K': '2336x3504' },
+            '5:4': { '1K': '1120x896', '2K': '2240x1792', '4K': '3200x2560' },
+            '4:5': { '1K': '896x1120', '2K': '1792x2240', '4K': '2560x3200' },
+            '21:9': { '1K': '1456x624', '2K': '2912x1248', '4K': '3840x1648' },
+            '9:21': { '1K': '624x1456', '2K': '1248x2912', '4K': '1648x3840' },
+            '1:3': { '2K': '688x2048', '4K': '1280x3840' },
+            '3:1': { '2K': '2048x688', '4K': '3840x1280' },
+            '2:1': { '1K': '1536x768', '2K': '3072x1536', '4K': '3840x1920' },
+            '1:2': { '1K': '768x1536', '2K': '1536x3072', '4K': '1920x3840' }
+        };
+
+        function getOpenAIImageSize(resolution, ratio) {
+            return OPENAI_SIZE_MAP[ratio]?.[resolution] || '1024x1024';
+        }
+
+        function isGptImageModel(model) {
+            return model === 'gpt-image-2-65535' || model === 'gpt-image-2-grsai';
+        }
+
+        const FIXED_BANANA_MODEL_SIZES = {
+            'nano-banana-2-cl': '1K',
+            'nano-banana-2-2k-cl': '2K',
+            'nano-banana-2-4k-cl': '4K'
+        };
+
+        function getFixedBananaModelSize(model) {
+            return FIXED_BANANA_MODEL_SIZES[model] || null;
+        }
+
+        function getSelectedModel(windowId) {
+            const modelSelect = document.getElementById(`model-${windowId}`);
+            return modelSelect ? modelSelect.value : '';
+        }
+
+        let enabledModels = [];
+
+        // 渲染设置中的模型配置列表
+        function renderModelConfigList() {
+            const container = document.getElementById('modelConfigGroups');
+            container.innerHTML = '';
+            
+            // 添加所有模型全选/反选控件
+            const selectAllDiv = document.createElement('div');
+            selectAllDiv.style.marginBottom = '12px';
+            selectAllDiv.style.display = 'flex';
+            selectAllDiv.style.alignItems = 'center';
+            selectAllDiv.style.gap = '8px';
+            
+            const isAllSelected = enabledModels.length === AVAILABLE_MODELS.length;
+            
+            selectAllDiv.innerHTML = `
+                <input type="checkbox" id="config-model-all-multi" value="" ${isAllSelected ? 'checked' : ''} onchange="toggleAllModels(this.checked)">
+                <label for="config-model-all-multi" style="font-size: 14px; font-weight: bold; cursor: pointer; color: #c8cad0;">全选/取消全选</label>
+            `;
+            container.appendChild(selectAllDiv);
+            
+            for (const models of [AVAILABLE_MODELS]) {
+                const groupDiv = document.createElement('div');
+                groupDiv.style.background = 'rgba(255, 255, 255, 0.055)';
+                groupDiv.style.border = '1px solid var(--line)';
+                groupDiv.style.borderRadius = '8px';
+                groupDiv.style.padding = '12px';
+                
+                const groupTitle = document.createElement('div');
+                groupTitle.style.fontSize = '14px';
+                groupTitle.style.fontWeight = '600';
+                groupTitle.style.color = 'var(--text)';
+                groupTitle.style.marginBottom = '12px';
+                groupTitle.style.borderBottom = '1px solid var(--line)';
+                groupTitle.style.paddingBottom = '8px';
+                groupTitle.textContent = '模型列表';
+                groupDiv.appendChild(groupTitle);
+                
+                if (models.length === 0) {
+                    const emptyNote = document.createElement('div');
+                    emptyNote.style.fontSize = '12px';
+                    emptyNote.style.color = '#6b7280';
+                    emptyNote.textContent = '暂无可用模型配置';
+                    groupDiv.appendChild(emptyNote);
+                } else {
+                    const modelsGrid = document.createElement('div');
+                    modelsGrid.style.display = 'grid';
+                    modelsGrid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+                    modelsGrid.style.gap = '12px';
+                    
+                    models.forEach(model => {
+                        const isChecked = enabledModels.includes(model);
+                        const item = document.createElement('div');
+                        item.style.display = 'flex';
+                        item.style.alignItems = 'center';
+                        item.style.gap = '8px';
+                        
+                        item.innerHTML = `
+                            <input type="checkbox" id="config-model-${model}" value="${model}" ${isChecked ? 'checked' : ''} onchange="updateEnabledModels()">
+                            <label for="config-model-${model}" style="font-size: 13px; cursor: pointer;">${getModelLabel(model)}</label>
+                        `;
+                        modelsGrid.appendChild(item);
+                    });
+                    groupDiv.appendChild(modelsGrid);
+                }
+                container.appendChild(groupDiv);
+            }
+        }
+        
+        // 更新启用模型列表
+        function updateEnabledModels() {
+            const checkboxes = document.querySelectorAll('#modelConfigGroups input[type="checkbox"]');
+            enabledModels = Array.from(checkboxes)
+                .filter(cb => cb.checked && AVAILABLE_MODELS.includes(cb.value))
+                .map(cb => cb.value);
+            
+            // 如果全部取消勾选，强制保留一个
+            if (enabledModels.length === 0 && AVAILABLE_MODELS.length > 0) {
+                enabledModels = [AVAILABLE_MODELS[0]];
+                showToast('至少需要保留一个模型', 'error');
+                renderModelConfigList();
+            }
+            
+            // 更新所有打开的窗口的模型列表
+            Object.values(windows).forEach(win => {
+                if (win.element) {
+                    renderModelOptionsForWindow(win.id);
+                }
+            });
+        }
+        
+        // 切换所有模型状态
+        function toggleAllModels(checked) {
+            if (checked) {
+                enabledModels = [...AVAILABLE_MODELS];
+            } else {
+                // 至少保留一个模型
+                enabledModels = [AVAILABLE_MODELS[0]];
+                showToast('至少需要保留一个模型', 'info');
+            }
+            renderModelConfigList();
+            
+            // 更新所有打开的窗口的模型列表
+            Object.values(windows).forEach(win => {
+                if (win.element) {
+                    renderModelOptionsForWindow(win.id);
+                }
+            });
+        }
+
+        // 为特定窗口渲染模型选项
+        function renderModelOptionsForWindow(windowId) {
+            const modelSelect = document.getElementById(`model-${windowId}`);
+            if (!modelSelect) return;
+            
+            const currentSelected = modelSelect.value;
+            modelSelect.innerHTML = '';
+            
+            enabledModels = enabledModels.filter(model => AVAILABLE_MODELS.includes(model));
+            enabledModels.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = getModelLabel(model);
+                modelSelect.appendChild(option);
+            });
+            
+            if (enabledModels.includes(currentSelected)) {
+                modelSelect.value = currentSelected;
+            } else if (enabledModels.length > 0) {
+                modelSelect.value = enabledModels[0];
+            }
+            
+            modelSelect.dispatchEvent(new Event('change'));
+        }
+
+        // 窗口拖动状态
+        let dragState = {
+            isDragging: false,
+            windowId: null,
+            startX: 0,
+            startY: 0,
+            initialX: 0,
+            initialY: 0
+        };
+
+        // 窗口调整大小状态
+        let resizeState = {
+            isResizing: false,
+            windowId: null,
+            startX: 0,
+            startY: 0,
+            initialWidth: 0,
+            initialHeight: 0
+        };
+
+        // 创建新窗口
+        function createNewWindow() {
+            const windowId = ++windowCounter;
+            const title = `生图窗口 #${windowId}`;
+            
+            const windowEl = document.createElement('div');
+            windowEl.className = 'window';
+            windowEl.id = `window-${windowId}`;
+            windowEl.style.width = '600px';
+            windowEl.style.height = '700px';
+            windowEl.style.left = `${50 + (windowId * 30) % 200}px`;
+            windowEl.style.top = `${50 + (windowId * 30) % 150}px`;
+            windowEl.style.zIndex = windowId;
+            
+            windowEl.innerHTML = `
+                <div class="window-titlebar" onmousedown="startDrag(event, ${windowId})">
+                    <div class="window-title">${title}</div>
+                    <div class="window-controls">
+                        <button class="window-btn" onclick="minimizeWindow(${windowId})">−</button>
+                        <button class="window-btn" onclick="toggleMaximize(${windowId})">□</button>
+                        <button class="window-btn close" onclick="closeWindow(${windowId})">✕</button>
+                    </div>
+                </div>
+                <div class="window-content" id="content-${windowId}">
+                    ${generateWindowContent(windowId)}
+                </div>
+                <div class="window-resize-handle" onmousedown="startResize(event, ${windowId})"></div>
+            `;
+            
+            document.getElementById('desktop').appendChild(windowEl);
+            
+            // 绑定模型切换事件
+            const modelSelect = document.getElementById(`model-${windowId}`);
+            if (modelSelect) {
+                modelSelect.addEventListener('change', (event) => {
+                    const model = event.target.value;
+                    const bananaSizePanel = document.getElementById(`bananaSizePanel-${windowId}`);
+                    const bananaRatioPanel = document.getElementById(`bananaRatioPanel-${windowId}`);
+                    const openaiSizePanel = document.getElementById(`openaiSizePanel-${windowId}`);
+                    const banana2OnlyBtns = document.querySelectorAll(`.banana2-only-${windowId}`);
+
+                    if (isGptImageModel(model)) {
+                        if (bananaSizePanel) bananaSizePanel.style.display = 'none';
+                        if (bananaRatioPanel) bananaRatioPanel.style.display = 'none';
+                        if (openaiSizePanel) openaiSizePanel.style.display = 'block';
+                        syncGptImageSizingUI(windowId);
+                        return;
+                    }
+
+                    if (bananaSizePanel) bananaSizePanel.style.display = 'block';
+                    if (bananaRatioPanel) bananaRatioPanel.style.display = 'block';
+                    if (openaiSizePanel) openaiSizePanel.style.display = 'none';
+                    const windowData = windows[windowId];
+                    if (windowData && String(windowData.selectedSize).includes('x')) {
+                        const defaultBananaSizeBtn = document.querySelector(`#bananaSizePanel-${windowId} .size-btn`);
+                        if (defaultBananaSizeBtn) selectSize(windowId, defaultBananaSizeBtn, '1K');
+                    }
+                    syncBananaSizeAvailability(windowId, model);
+
+                    if (model.includes('nano-banana-2')) {
+                        banana2OnlyBtns.forEach(btn => btn.style.display = 'block');
+                    } else {
+                        banana2OnlyBtns.forEach(btn => btn.style.display = 'none');
+                        const activeRatio = document.querySelector(`#bananaRatioSelector-${windowId} .ratio-btn.active`);
+                        if (activeRatio && activeRatio.classList.contains(`banana2-only-${windowId}`)) {
+                            const autoBtn = document.querySelector(`#bananaRatioSelector-${windowId} .ratio-btn[data-ratio="auto"]`);
+                            if (autoBtn) selectRatio(windowId, autoBtn, 'auto');
+                        }
+                    }
+                });
+            }
+            
+            // 保存窗口数据
+            windows[windowId] = {
+                id: windowId,
+                title: title,
+                element: windowEl,
+                referenceImages: [],
+                referenceImageItems: [],
+                promptMode: 'single',
+                selectedSize: '1K',
+                selectedRatio: 'auto',
+                taskId: null,
+                isMaximized: false
+            };
+            
+            // 激活窗口
+            activateWindow(windowId);
+            
+            // 强制新窗口应用当前全局模型列表
+            renderModelOptionsForWindow(windowId);
+            
+            // 为新窗口的上传区域绑定拖拽事件
+            setupDragAndDrop(windowId);
+        }
+
+        // 设置拖拽事件
+        function setupDragAndDrop(windowId) {
+            const uploadArea = document.getElementById(`uploadArea-${windowId}`);
+            if (!uploadArea) return;
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadArea.classList.add('drag-over');
+            });
+            
+            uploadArea.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadArea.classList.remove('drag-over');
+            });
+            
+            uploadArea.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadArea.classList.remove('drag-over');
+                
+                const files = Array.from(e.dataTransfer.files).filter(file => 
+                    file.type.startsWith('image/')
+                );
+                uploadReferenceFiles(windowId, files);
+            });
+        }
+
+        // 生成窗口内容
+        function generateWindowContent(windowId) {
+            return `
+                <div class="section">
+                    <div class="section-title">🖼️ 参考图（可拖拽）</div>
+                    <div class="upload-area" id="uploadArea-${windowId}" onclick="document.getElementById('refImages-${windowId}').click()">
+                        <div class="icon">📁</div>
+                        <div class="text">点击或拖拽图片到此处上传</div>
+                    </div>
+                    <input type="file" id="refImages-${windowId}" accept="image/*" multiple onchange="handleRefImagesUpload(event, ${windowId})">
+                    <div class="ref-preview-grid" id="refPreview-${windowId}"></div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">✏️ 提示词</div><div id="singlePromptArea-${windowId}">
+                        <textarea class="form-textarea" id="singlePrompt-${windowId}" placeholder="请输入提示词..."></textarea>
+                    </div></div>
+
+                <div class="section">
+                    <div class="section-title">📐 图像尺寸 & 分辨率</div>
+                    
+                    <div id="bananaSizePanel-${windowId}">
+                        <label class="form-label">分辨率</label>
+                        <div class="size-selector">
+                            <div class="size-btn active" data-size="1K" onclick="selectSize(${windowId}, this, '1K')">1K 标准</div>
+                            <div class="size-btn" data-size="2K" onclick="selectSize(${windowId}, this, '2K')">2K 高清</div>
+                            <div class="size-btn" data-size="4K" onclick="selectSize(${windowId}, this, '4K')">4K 超清</div>
+                        </div>
+                    </div>
+
+                    <div id="bananaRatioPanel-${windowId}">
+                        <label class="form-label">宽高比</label>
+                        <div class="ratio-selector" id="bananaRatioSelector-${windowId}">
+                            <div class="ratio-btn active" data-ratio="auto" onclick="selectRatio(${windowId}, this, 'auto')">auto</div>
+                            <div class="ratio-btn" data-ratio="1:1" onclick="selectRatio(${windowId}, this, '1:1')">1:1</div>
+                            <div class="ratio-btn" data-ratio="16:9" onclick="selectRatio(${windowId}, this, '16:9')">16:9</div>
+                            <div class="ratio-btn" data-ratio="9:16" onclick="selectRatio(${windowId}, this, '9:16')">9:16</div>
+                            <div class="ratio-btn" data-ratio="4:3" onclick="selectRatio(${windowId}, this, '4:3')">4:3</div>
+                            <div class="ratio-btn" data-ratio="3:4" onclick="selectRatio(${windowId}, this, '3:4')">3:4</div>
+                            <div class="ratio-btn" data-ratio="3:2" onclick="selectRatio(${windowId}, this, '3:2')">3:2</div>
+                            <div class="ratio-btn" data-ratio="2:3" onclick="selectRatio(${windowId}, this, '2:3')">2:3</div>
+                            <div class="ratio-btn" data-ratio="5:4" onclick="selectRatio(${windowId}, this, '5:4')">5:4</div>
+                            <div class="ratio-btn" data-ratio="4:5" onclick="selectRatio(${windowId}, this, '4:5')">4:5</div>
+                            <div class="ratio-btn" data-ratio="21:9" onclick="selectRatio(${windowId}, this, '21:9')">21:9</div>
+                            <div class="ratio-btn banana2-only-${windowId}" data-ratio="1:4" onclick="selectRatio(${windowId}, this, '1:4')" style="display: none;">1:4</div>
+                            <div class="ratio-btn banana2-only-${windowId}" data-ratio="4:1" onclick="selectRatio(${windowId}, this, '4:1')" style="display: none;">4:1</div>
+                            <div class="ratio-btn banana2-only-${windowId}" data-ratio="1:8" onclick="selectRatio(${windowId}, this, '1:8')" style="display: none;">1:8</div>
+                            <div class="ratio-btn banana2-only-${windowId}" data-ratio="8:1" onclick="selectRatio(${windowId}, this, '8:1')" style="display: none;">8:1</div>
+                        </div>
+                    </div>
+
+                    <div id="openaiSizePanel-${windowId}" style="display: none;">
+                        <label class="form-label">分辨率</label>
+                        <div class="size-selector">
+                            <div class="size-btn active" data-size="1K" onclick="selectSize(${windowId}, this, '1K')">1K</div>
+                            <div class="size-btn" data-size="2K" onclick="selectSize(${windowId}, this, '2K')">2K</div>
+                            <div class="size-btn" data-size="4K" onclick="selectSize(${windowId}, this, '4K')">4K</div>
+                        </div>
+
+                        <label class="form-label">宽高比</label>
+                        <div class="ratio-selector" id="openaiRatioSelector-${windowId}">
+                            <div class="ratio-btn active" data-ratio="1:1" onclick="selectRatio(${windowId}, this, '1:1')">1:1</div>
+                            <div class="ratio-btn" data-ratio="16:9" onclick="selectRatio(${windowId}, this, '16:9')">16:9</div>
+                            <div class="ratio-btn" data-ratio="9:16" onclick="selectRatio(${windowId}, this, '9:16')">9:16</div>
+                            <div class="ratio-btn" data-ratio="4:3" onclick="selectRatio(${windowId}, this, '4:3')">4:3</div>
+                            <div class="ratio-btn" data-ratio="3:4" onclick="selectRatio(${windowId}, this, '3:4')">3:4</div>
+                            <div class="ratio-btn" data-ratio="3:2" onclick="selectRatio(${windowId}, this, '3:2')">3:2</div>
+                            <div class="ratio-btn" data-ratio="2:3" onclick="selectRatio(${windowId}, this, '2:3')">2:3</div>
+                            <div class="ratio-btn" data-ratio="5:4" onclick="selectRatio(${windowId}, this, '5:4')">5:4</div>
+                            <div class="ratio-btn" data-ratio="4:5" onclick="selectRatio(${windowId}, this, '4:5')">4:5</div>
+                            <div class="ratio-btn" data-ratio="21:9" onclick="selectRatio(${windowId}, this, '21:9')">21:9</div>
+                            <div class="ratio-btn" data-ratio="9:21" onclick="selectRatio(${windowId}, this, '9:21')">9:21</div>
+                            <div class="ratio-btn openai-2k-only-${windowId}" data-ratio="1:3" onclick="selectRatio(${windowId}, this, '1:3')">1:3</div>
+                            <div class="ratio-btn openai-2k-only-${windowId}" data-ratio="3:1" onclick="selectRatio(${windowId}, this, '3:1')">3:1</div>
+                            <div class="ratio-btn" data-ratio="2:1" onclick="selectRatio(${windowId}, this, '2:1')">2:1</div>
+                            <div class="ratio-btn" data-ratio="1:2" onclick="selectRatio(${windowId}, this, '1:2')">1:2</div>
+                        </div>
+                    </div>
+
+                    <label class="form-label">数量</label>
+                    <div class="count-control">
+                        <button class="count-btn" onclick="changeCount(${windowId}, -1)">-</button>
+                        <input type="number" class="count-input" id="countPerPrompt-${windowId}" value="1" min="1" max="10">
+                        <button class="count-btn" onclick="changeCount(${windowId}, 1)">+</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">🎯 模型选择</div>
+                    <select class="form-select" id="model-${windowId}">
+                        <!-- 选项将由 JS 动态生成 -->
+                    </select>
+                </div>
+
+                <button class="btn btn-primary" id="generateBtn-${windowId}" onclick="startGeneration(${windowId})">
+                    <span class="btn-text">⚡ 开始生成</span>
+                </button>
+
+                <div id="taskStatus-${windowId}" style="display: none; margin-top: 16px;">
+                    <div class="task-progress">
+                        <div class="task-progress-fill" id="taskProgress-${windowId}" style="width: 0%"></div>
+                    </div>
+                    <div class="task-info" id="taskInfo-${windowId}">准备中...</div>
+                    <div class="task-results" id="taskResults-${windowId}"></div>
+                </div>
+            `;
+        }
+
+        // 激活窗口
+        function activateWindow(windowId) {
+            // 更新所有窗口的 z-index
+            Object.values(windows).forEach(win => {
+                if (win.element) {
+                    win.element.style.zIndex = '1';
+                    win.element.classList.remove('active');
+                }
+            });
+            
+            const window = windows[windowId];
+            if (window && window.element) {
+                window.element.style.zIndex = '100';
+                window.element.classList.add('active');
+                window.element.classList.remove('minimized');
+                
+                activeWindowId = windowId;
+            }
+        }
+
+        // 最小化窗口
+        function minimizeWindow(windowId) {
+            const window = windows[windowId];
+            if (window && window.element) {
+                window.element.classList.add('minimized');
+            }
+        }
+
+        // 切换最大化
+        function toggleMaximize(windowId) {
+            const window = windows[windowId];
+            if (window && window.element) {
+                window.isMaximized = !window.isMaximized;
+                if (window.isMaximized) {
+                    window.element.classList.add('maximized');
+                } else {
+                    window.element.classList.remove('maximized');
+                }
+            }
+        }
+
+        // 关闭窗口
+        function closeWindow(windowId) {
+            const window = windows[windowId];
+            if (window) {
+                // 移除窗口元素
+                if (window.element) {
+                    window.element.style.animation = 'windowAppear 0.2s ease reverse forwards';
+                    setTimeout(() => window.element.remove(), 200);
+                }
+                
+                // 移除任务栏项
+                
+                // 删除窗口数据
+                delete windows[windowId];
+            }
+        }
+
+        // 获取桌面边界
+        function getDesktopBounds() {
+            const desktop = document.getElementById('desktop');
+            return {
+                width: desktop.offsetWidth,
+                height: desktop.offsetHeight
+            };
+        }
+
+        const SNAP_DISTANCE = 16;
+
+        function getSnapTargets(windowId) {
+            const bounds = getDesktopBounds();
+            const vertical = [0, bounds.width];
+            const horizontal = [0, bounds.height];
+
+            Object.values(windows).forEach(win => {
+                if (!win.element || win.id === windowId || win.element.classList.contains('minimized')) return;
+                vertical.push(win.element.offsetLeft, win.element.offsetLeft + win.element.offsetWidth);
+                horizontal.push(win.element.offsetTop, win.element.offsetTop + win.element.offsetHeight);
+            });
+
+            return { vertical, horizontal };
+        }
+
+        function snapValue(value, targets) {
+            let snapped = value;
+            let closest = SNAP_DISTANCE + 1;
+
+            targets.forEach(target => {
+                const distance = Math.abs(value - target);
+                if (distance <= SNAP_DISTANCE && distance < closest) {
+                    snapped = target;
+                    closest = distance;
+                }
+            });
+
+            return snapped;
+        }
+
+        function snapWindowPosition(windowId, x, y, width, height) {
+            const targets = getSnapTargets(windowId);
+            const leftSnap = snapValue(x, targets.vertical);
+            const rightSnap = snapValue(x + width, targets.vertical);
+            const topSnap = snapValue(y, targets.horizontal);
+            const bottomSnap = snapValue(y + height, targets.horizontal);
+
+            if (Math.abs(leftSnap - x) <= Math.abs(rightSnap - (x + width))) {
+                x = leftSnap;
+            } else {
+                x = rightSnap - width;
+            }
+
+            if (Math.abs(topSnap - y) <= Math.abs(bottomSnap - (y + height))) {
+                y = topSnap;
+            } else {
+                y = bottomSnap - height;
+            }
+
+            const bounds = getDesktopBounds();
+            x = Math.max(0, Math.min(x, bounds.width - width));
+            y = Math.max(0, Math.min(y, bounds.height - height));
+
+            return { x, y };
+        }
+
+        function snapWindowSize(windowId, left, top, width, height) {
+            const targets = getSnapTargets(windowId);
+            const snappedRight = snapValue(left + width, targets.vertical);
+            const snappedBottom = snapValue(top + height, targets.horizontal);
+
+            if (Math.abs(snappedRight - (left + width)) <= SNAP_DISTANCE) {
+                width = snappedRight - left;
+            }
+            if (Math.abs(snappedBottom - (top + height)) <= SNAP_DISTANCE) {
+                height = snappedBottom - top;
+            }
+
+            return {
+                width: Math.max(400, width),
+                height: Math.max(300, height)
+            };
+        }
+
+        // 开始拖动
+        function startDrag(event, windowId) {
+            if (event.target.classList.contains('window-btn')) {
+                return; // 如果点击的是窗口控制按钮，不拖动
+            }
+            
+            const window = windows[windowId];
+            if (window && !window.isMaximized) {
+                dragState.isDragging = true;
+                dragState.windowId = windowId;
+                dragState.startX = event.clientX;
+                dragState.startY = event.clientY;
+                dragState.initialX = window.element.offsetLeft;
+                dragState.initialY = window.element.offsetTop;
+                window.element.classList.add('snapping');
+                
+                activateWindow(windowId);
+            }
+        }
+
+        // 开始调整大小
+        function startResize(event, windowId) {
+            event.stopPropagation();
+            const window = windows[windowId];
+            if (window && !window.isMaximized) {
+                resizeState.isResizing = true;
+                resizeState.windowId = windowId;
+                resizeState.startX = event.clientX;
+                resizeState.startY = event.clientY;
+                resizeState.initialWidth = window.element.offsetWidth;
+                resizeState.initialHeight = window.element.offsetHeight;
+                window.element.classList.add('snapping');
+            }
+        }
+
+        // 鼠标移动事件 - 添加边界约束
+        document.addEventListener('mousemove', (event) => {
+            if (dragState.isDragging) {
+                const window = windows[dragState.windowId];
+                if (window) {
+                    const bounds = getDesktopBounds();
+                    const windowWidth = window.element.offsetWidth;
+                    const windowHeight = window.element.offsetHeight;
+                    
+                    const deltaX = event.clientX - dragState.startX;
+                    const deltaY = event.clientY - dragState.startY;
+                    
+                    // 计算新位置并限制在边界内
+                    let newX = dragState.initialX + deltaX;
+                    let newY = dragState.initialY + deltaY;
+                    
+                    // 左边界
+                    if (newX < 0) newX = 0;
+                    // 右边界
+                    if (newX + windowWidth > bounds.width) newX = bounds.width - windowWidth;
+                    // 上边界
+                    if (newY < 0) newY = 0;
+                    // 下边界
+                    if (newY + windowHeight > bounds.height) newY = bounds.height - windowHeight;
+
+                    const snapped = snapWindowPosition(dragState.windowId, newX, newY, windowWidth, windowHeight);
+                    newX = snapped.x;
+                    newY = snapped.y;
+                    
+                    window.element.style.left = newX + 'px';
+                    window.element.style.top = newY + 'px';
+                }
+            } else if (resizeState.isResizing) {
+                const window = windows[resizeState.windowId];
+                if (window) {
+                    const bounds = getDesktopBounds();
+                    const windowLeft = window.element.offsetLeft;
+                    const windowTop = window.element.offsetTop;
+                    
+                    const deltaX = event.clientX - resizeState.startX;
+                    const deltaY = event.clientY - resizeState.startY;
+                    
+                    // 计算新尺寸并限制在边界内
+                    let newWidth = Math.max(400, resizeState.initialWidth + deltaX);
+                    let newHeight = Math.max(300, resizeState.initialHeight + deltaY);
+                    
+                    // 确保窗口不超过右边界
+                    if (windowLeft + newWidth > bounds.width) {
+                        newWidth = bounds.width - windowLeft;
+                    }
+                    // 确保窗口不超过下边界
+                    if (windowTop + newHeight > bounds.height) {
+                        newHeight = bounds.height - windowTop;
+                    }
+                    
+                    // 确保最小尺寸
+                    const snappedSize = snapWindowSize(resizeState.windowId, windowLeft, windowTop, newWidth, newHeight);
+                    newWidth = snappedSize.width;
+                    newHeight = snappedSize.height;
+                    
+                    window.element.style.width = newWidth + 'px';
+                    window.element.style.height = newHeight + 'px';
+                }
+            }
+        });
+
+        // 鼠标释放事件
+        document.addEventListener('mouseup', () => {
+            if (dragState.windowId && windows[dragState.windowId]?.element) {
+                windows[dragState.windowId].element.classList.remove('snapping');
+            }
+            if (resizeState.windowId && windows[resizeState.windowId]?.element) {
+                windows[resizeState.windowId].element.classList.remove('snapping');
+            }
+            dragState.isDragging = false;
+            resizeState.isResizing = false;
+        });
+
+        // 处理参考图上传
+        async function handleRefImagesUpload(event, windowId) {
+            const files = Array.from(event.target.files || []).filter(file => file.type.startsWith('image/'));
+            uploadReferenceFiles(windowId, files);
+            event.target.value = '';
+        }
+
+        function syncReferenceImages(window) {
+            window.referenceImages = (window.referenceImageItems || [])
+                .filter(item => item.status === 'ready' && item.path)
+                .map(item => item.path);
+        }
+
+        async function uploadReferenceFiles(windowId, files) {
+            const window = windows[windowId];
+            if (!window || !files.length) return;
+
+            if (!window.referenceImageItems) window.referenceImageItems = [];
+
+            const uploadItems = [];
+            files.forEach(file => {
+                const item = {
+                    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                    name: file.name,
+                    localUrl: URL.createObjectURL(file),
+                    thumbUrl: '',
+                    path: '',
+                    status: 'uploading',
+                    statusText: '上传中...',
+                    error: '',
+                    file
+                };
+
+                if (file.size > MAX_REFERENCE_IMAGE_SIZE) {
+                    item.status = 'failed';
+                    item.statusText = `超过 ${MAX_REFERENCE_IMAGE_SIZE_MB}MB`;
+                    item.error = `文件过大，请压缩到 ${MAX_REFERENCE_IMAGE_SIZE_MB}MB 以内再上传`;
+                    delete item.file;
+                    showToast(`${file.name} 超过 ${MAX_REFERENCE_IMAGE_SIZE_MB}MB，请压缩后再上传`, 'error');
+                } else {
+                    uploadItems.push(item);
+                }
+
+                window.referenceImageItems.push(item);
+            });
+
+            updateRefPreview(windowId);
+            await runUploadQueue(windowId, uploadItems);
+        }
+
+        async function runUploadQueue(windowId, items) {
+            let cursor = 0;
+            const workers = Array.from({ length: Math.min(UPLOAD_CONCURRENCY, items.length) }, async () => {
+                while (cursor < items.length) {
+                    const item = items[cursor++];
+                    await uploadReferenceItem(windowId, item);
+                }
+            });
+            await Promise.all(workers);
+        }
+
+        async function uploadReferenceItem(windowId, item) {
+            const formData = new FormData();
+            formData.append('file', item.file);
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const contentType = response.headers.get('content-type') || '';
+                const data = contentType.includes('application/json') ? await response.json() : { success: false, error: await response.text() };
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || `上传失败 (${response.status})`);
+                }
+
+                item.path = data.path;
+                item.thumbUrl = data.thumb_url || '';
+                if (item.thumbUrl && item.localUrl) {
+                    URL.revokeObjectURL(item.localUrl);
+                    item.localUrl = '';
+                }
+                item.status = 'ready';
+                item.statusText = '已上传';
+                item.error = '';
+            } catch (error) {
+                item.status = 'failed';
+                item.statusText = '上传失败';
+                item.error = error.message || '上传失败';
+                showToast(`${item.name} 上传失败: ${item.error}`, 'error');
+            } finally {
+                delete item.file;
+                const window = windows[windowId];
+                if (window) syncReferenceImages(window);
+                updateRefPreview(windowId);
+            }
+        }
+
+        // 更新参考图预览
+        function updateRefPreview(windowId) {
+            const window = windows[windowId];
+            if (!window) return;
+            
+            const preview = document.getElementById(`refPreview-${windowId}`);
+            if (!preview) return;
+            
+            preview.innerHTML = '';
+            
+            const items = window.referenceImageItems || window.referenceImages.map(path => ({
+                path,
+                thumbUrl: '',
+                localUrl: '',
+                name: path.split(/[\\/]/).pop(),
+                status: 'ready',
+                statusText: '',
+                error: ''
+            }));
+            window.referenceImageItems = items;
+            syncReferenceImages(window);
+            
+            items.forEach((item, index) => {
+                const div = document.createElement('div');
+                const status = item.status || 'ready';
+                div.className = `ref-item ${status}`;
+                div.draggable = status === 'ready';
+                div.dataset.index = index;
+                div.style.animationDelay = (index * 0.1) + 's';
+                
+                const imgUrl = item.localUrl || item.thumbUrl || getUploadImageUrl(item.path);
+                const statusText = status === 'failed' ? (item.error || item.statusText || '上传失败') : (item.statusText || '');
+                const safeName = escapeHtml(item.name || `参考图${index + 1}`);
+                const safeStatus = escapeHtml(statusText);
+                
+                div.innerHTML = `
+                    <img src="${imgUrl}" alt="${safeName}">
+                    <div class="ref-status" title="${safeStatus}">${safeStatus}</div>
+                    <button class="remove-btn" onclick="removeRefImage(${windowId}, ${index})">×</button>
+                `;
+                div.insertAdjacentHTML('beforeend', `<span class="ref-order-badge">${index + 1}</span>`);
+                div.addEventListener('dragstart', (event) => {
+                    if (status !== 'ready') {
+                        event.preventDefault();
+                        return;
+                    }
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', String(index));
+                    div.classList.add('dragging');
+                });
+                div.addEventListener('dragend', () => {
+                    div.classList.remove('dragging');
+                });
+                div.addEventListener('dragover', (event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                });
+                div.addEventListener('drop', (event) => {
+                    event.preventDefault();
+                    const fromIndex = Number(event.dataTransfer.getData('text/plain'));
+                    reorderRefImage(windowId, fromIndex, index);
+                });
+                preview.appendChild(div);
+            });
+        }
+
+        function reorderRefImage(windowId, fromIndex, toIndex) {
+            const window = windows[windowId];
+            if (!window || fromIndex === toIndex || Number.isNaN(fromIndex) || Number.isNaN(toIndex)) return;
+
+            const items = window.referenceImageItems || [];
+            if (!items[fromIndex] || toIndex < 0 || toIndex >= items.length) return;
+
+            const [moved] = items.splice(fromIndex, 1);
+            items.splice(toIndex, 0, moved);
+            syncReferenceImages(window);
+            updateRefPreview(windowId);
+        }
+
+        // 删除参考图
+        function removeRefImage(windowId, index) {
+            const window = windows[windowId];
+            if (window) {
+                const items = window.referenceImageItems || [];
+                const [removed] = items.splice(index, 1);
+                if (removed?.localUrl) URL.revokeObjectURL(removed.localUrl);
+                syncReferenceImages(window);
+                updateRefPreview(windowId);
+            }
+        }
+
+        function setActiveButton(container, selector) {
+            if (!container) return;
+            container.querySelectorAll('.size-btn, .ratio-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = container.querySelector(selector);
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+
+        function syncGptImageSizingUI(windowId) {
+            const window = windows[windowId];
+            if (!window) return;
+
+            if (!['1K', '2K', '4K'].includes(window.selectedSize)) {
+                window.selectedSize = '1K';
+            }
+            if (!OPENAI_SIZE_MAP[window.selectedRatio]?.[window.selectedSize]) {
+                window.selectedRatio = '1:1';
+            }
+
+            const openaiSizePanel = document.getElementById(`openaiSizePanel-${windowId}`);
+            const openaiRatioSelector = document.getElementById(`openaiRatioSelector-${windowId}`);
+            setActiveButton(openaiSizePanel, `.size-btn[data-size="${window.selectedSize}"]`);
+            setActiveButton(openaiRatioSelector, `.ratio-btn[data-ratio="${window.selectedRatio}"]`);
+            updateOpenAIRatioAvailability(windowId);
+        }
+
+        function syncBananaSizeAvailability(windowId, model = getSelectedModel(windowId)) {
+            const window = windows[windowId];
+            const bananaSizePanel = document.getElementById(`bananaSizePanel-${windowId}`);
+            if (!window || !bananaSizePanel) return;
+
+            const fixedSize = getFixedBananaModelSize(model);
+            const buttons = bananaSizePanel.querySelectorAll('.size-btn');
+            buttons.forEach(btn => {
+                const isAllowed = !fixedSize || btn.dataset.size === fixedSize;
+                btn.classList.toggle('disabled', !isAllowed);
+                btn.setAttribute('aria-disabled', String(!isAllowed));
+            });
+
+            if (fixedSize) {
+                window.selectedSize = fixedSize;
+            } else if (!['1K', '2K', '4K'].includes(window.selectedSize)) {
+                window.selectedSize = '1K';
+            }
+
+            setActiveButton(bananaSizePanel, `.size-btn[data-size="${window.selectedSize}"]`);
+        }
+        // 选择尺寸
+        function selectSize(windowId, element, size) {
+            const window = windows[windowId];
+            if (!window) return;
+
+            const selectedModel = getSelectedModel(windowId);
+            const fixedSize = getFixedBananaModelSize(selectedModel);
+            if (fixedSize && size !== fixedSize) {
+                const fixedSizeBtn = document.querySelector(`#bananaSizePanel-${windowId} .size-btn[data-size="${fixedSize}"]`);
+                if (fixedSizeBtn) {
+                    selectSize(windowId, fixedSizeBtn, fixedSize);
+                } else {
+                    window.selectedSize = fixedSize;
+                }
+                return;
+            }
+            
+            const selector = element?.closest('.size-selector');
+            if (selector) {
+                selector.querySelectorAll('.size-btn').forEach(btn => btn.classList.remove('active'));
+            }
+            if (element) element.classList.add('active');
+            window.selectedSize = size;
+            updateOpenAIRatioAvailability(windowId);
+        }
+
+        // 选择宽高比
+        function selectRatio(windowId, element, ratio) {
+            const window = windows[windowId];
+            if (!window) return;
+            
+            const content = document.getElementById(`content-${windowId}`);
+            if(content) {
+                // 仅移除对应面板的 active，避免相互影响，但更安全是全局移除该 window 下的
+                content.querySelectorAll('.ratio-btn').forEach(btn => btn.classList.remove('active'));
+            }
+            if(element) {
+                element.classList.add('active');
+            }
+            window.selectedRatio = ratio;
+        }
+
+        function updateOpenAIRatioAvailability(windowId) {
+            const window = windows[windowId];
+            if (!window) return;
+
+            const twoKOnlyBtns = document.querySelectorAll(`.openai-2k-only-${windowId}`);
+            const allowTwoKOnly = window.selectedSize !== '1K';
+            twoKOnlyBtns.forEach(btn => {
+                btn.style.display = allowTwoKOnly ? 'block' : 'none';
+            });
+
+            if (!allowTwoKOnly && ['1:3', '3:1'].includes(window.selectedRatio)) {
+                const defaultRatioBtn = document.querySelector(`#openaiRatioSelector-${windowId} .ratio-btn[data-ratio="1:1"]`);
+                if (defaultRatioBtn) selectRatio(windowId, defaultRatioBtn, '1:1');
+            }
+        }
+
+        // 数量控制
+        function changeCount(windowId, delta) {
+            const input = document.getElementById(`countPerPrompt-${windowId}`);
+            if (!input) return;
+            
+            let value = parseInt(input.value) + delta;
+            if (value < 1) value = 1;
+            if (value > 10) value = 10;
+            input.value = value;
+        }
+
+        // 开始生成
+        async function startGeneration(windowId) {
+            const window = windows[windowId];
+            if (!window) return;
+            
+            const selectedModel = document.getElementById(`model-${windowId}`).value;
+            const is65535Model = selectedModel === 'gpt-image-2-65535';
+            const usesMappedImageSize = isGptImageModel(selectedModel);
+            const selectedImageSize = getFixedBananaModelSize(selectedModel) || window.selectedSize;
+            const mappedImageSize = usesMappedImageSize ? getOpenAIImageSize(selectedImageSize, window.selectedRatio) : selectedImageSize;
+            const grsaiApiKey = globalConfig.apiKey || document.getElementById('apiKey').value.trim();
+            const apiKey65535 = globalConfig.apiKey65535 || document.getElementById('apiKey65535').value.trim();
+            if (!is65535Model && !grsaiApiKey) {
+                showToast('请先在设置中配置 GRSAI API Key', 'error');
+                openSettings();
+                return;
+            }
+            if (is65535Model && !apiKey65535) {
+                showToast('请先在设置中配置 65535 API Key', 'error');
+                openSettings();
+                return;
+            }
+            
+            const prompt = document.getElementById(`singlePrompt-${windowId}`).value.trim();
+            if (!prompt) {
+                showToast('请输入提示词', 'error');
+                return;
+            }
+            if ((window.referenceImageItems || []).some(item => item.status === 'uploading')) {
+                showToast('参考图还在上传，请稍等完成后再生成', 'info');
+                return;
+            }
+            syncReferenceImages(window);
+            const prompts = [prompt];
+            
+            const generateBtn = document.getElementById(`generateBtn-${windowId}`);
+            generateBtn.classList.add('loading');
+            
+            const params = {
+                apikey: grsaiApiKey,
+                api_key_65535: apiKey65535,
+                prompts: prompts,
+                count_per_prompt: parseInt(document.getElementById(`countPerPrompt-${windowId}`).value) || 1,
+                model: selectedModel,
+                image_size: mappedImageSize,
+                aspect_ratio: usesMappedImageSize ? mappedImageSize : window.selectedRatio,
+                output_dir: globalConfig.outputDir || 'outputs',
+                filename_prefix: globalConfig.filenamePrefix || 'grsai',
+                concurrent_limit: globalConfig.concurrentLimit || 5,
+                reference_images: window.referenceImages,
+                is_multi_prompt: false
+            };
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    window.taskId = data.task_id;
+                    document.getElementById(`taskStatus-${windowId}`).style.display = 'block';
+                    showToast('任务已开始生成！', 'success');
+                    pollTaskStatus(windowId, data.task_id);
+                } else {
+                    showToast('启动失败: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showToast('启动失败: ' + error.message, 'error');
+            } finally {
+                generateBtn.classList.remove('loading');
+            }
+        }
+
+        // 轮询任务状态
+        function pollTaskStatus(windowId, taskId) {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/task/${taskId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        updateTaskStatus(windowId, data.task);
+                        
+                        if (data.task.status === 'completed' || data.task.status === 'stopped') {
+                            clearInterval(interval);
+                            
+                            if (data.task.status === 'completed') {
+                                showToast(`任务完成！成功生成 ${data.task.completed} 张图片`, 'success');
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('轮询失败:', error);
+                    clearInterval(interval);
+                }
+            }, 2000);
+        }
+
+        // 更新任务状态
+        function updateTaskStatus(windowId, taskData) {
+            const progress = taskData.total > 0 ? Math.round((taskData.completed / taskData.total) * 100) : 0;
+            
+            const progressFill = document.getElementById(`taskProgress-${windowId}`);
+            if (progressFill) {
+                progressFill.style.width = progress + '%';
+            }
+            
+            const info = document.getElementById(`taskInfo-${windowId}`);
+            if (info) {
+                info.textContent = `${taskData.completed} / ${taskData.total} 已完成 (${taskData.failed} 失败)`;
+            }
+            
+            // 更新任务栏状态
+            let statusText = '';
+            if (taskData.status === 'running') {
+                statusText = `生成中 ${taskData.completed}/${taskData.total}`;
+            } else if (taskData.status === 'completed') {
+                statusText = `已完成 ✓`;
+            } else if (taskData.status === 'stopped') {
+                statusText = `已停止`;
+            }
+            
+            const resultsContainer = document.getElementById(`taskResults-${windowId}`);
+            if (resultsContainer) {
+                resultsContainer.innerHTML = '';
+                
+                for (let i = 0; i < taskData.total; i++) {
+                    const result = taskData.results[i];
+                    const thumb = document.createElement('div');
+                    
+                    if (result && result.success) {
+                        thumb.className = 'result-thumb';
+                        const imageUrl = `/api/file/${encodeURIComponent(result.image_path)}`;
+                        thumb.innerHTML = `<img src="${imageUrl}" alt="结果图">`;
+                        thumb.onclick = () => showImage(imageUrl);
+                    } else if (result && !result.success) {
+                        thumb.className = 'result-thumb loading';
+                        thumb.innerHTML = '<div class="failed-icon"></div>';
+                        thumb.title = result.error || '生成失败';
+                    } else {
+                        thumb.className = 'result-thumb loading';
+                        thumb.innerHTML = '<div class="spinner"></div>';
+                    }
+                    
+                    resultsContainer.appendChild(thumb);
+                }
+            }
+        }
+
+        // 显示图片
+        function showImage(url) {
+            document.getElementById('modalImage').src = url;
+            document.getElementById('imageModal').classList.add('active');
+        }
+
+        // 关闭图片模态框
+        function closeImageModal() {
+            document.getElementById('imageModal').classList.remove('active');
+        }
+
+        // 打开设置
+        function openSettings() {
+            document.getElementById('settingsModal').classList.add('active');
+        }
+
+        // 关闭设置
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.remove('active');
+        }
+
+        // 切换密码可见性
+        function togglePassword(inputId) {
+            const input = document.getElementById(inputId);
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+        function saveSettings() {
+            globalConfig = {
+                apiKey: document.getElementById('apiKey').value,
+                apiKey65535: document.getElementById('apiKey65535').value,
+                outputDir: document.getElementById('outputDir').value,
+                filenamePrefix: document.getElementById('filenamePrefix').value,
+                concurrentLimit: document.getElementById('concurrentLimit').value,
+                enabledModels: enabledModels.filter(model => AVAILABLE_MODELS.includes(model))
+            };
+            
+            localStorage.setItem('grsai_multiwindow_config', JSON.stringify(globalConfig));
+            showToast('设置已保存！', 'success');
+            closeSettings();
+        }
+
+        // Toast 提示
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.style.background = type === 'success' ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' : type === 'error' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : 'linear-gradient(135deg, #c8cad0 0%, #9da1aa 100%)';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // 加载设置
+        function loadSettings() {
+            const saved = localStorage.getItem('grsai_multiwindow_config');
+            if (saved) {
+                try {
+                    globalConfig = JSON.parse(saved);
+                    document.getElementById('apiKey').value = globalConfig.apiKey || '';
+                    document.getElementById('apiKey65535').value = globalConfig.apiKey65535 || '';
+                    document.getElementById('outputDir').value = globalConfig.outputDir || 'outputs';
+                    document.getElementById('filenamePrefix').value = globalConfig.filenamePrefix || 'grsai';
+                    document.getElementById('concurrentLimit').value = globalConfig.concurrentLimit || 5;
+                    
+                    enabledModels = [...AVAILABLE_MODELS];
+                } catch (e) {
+                    console.error('加载配置失败:', e);
+                    enabledModels = [...AVAILABLE_MODELS];
+                }
+            } else {
+                enabledModels = [...AVAILABLE_MODELS];
+            }
+            renderModelConfigList();
+        }
+
+        // 点击设置模态框外部关闭
+        document.getElementById('settingsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeSettings();
+            }
+        });
+
+        // 键盘事件
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeSettings();
+                closeImageModal();
+            }
+        });
+
+        // 页面加载完成
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('GRSAI 多窗口版已加载');
+            loadSettings();
+            // 确保加载完设置后全局模型被填充
+            updateEnabledModels();
+            // 自动创建第一个窗口
+            createNewWindow();
+            // 强制所有已创建的窗口应用当前模型
+            Object.values(windows).forEach(win => {
+                if (win.element) {
+                    renderModelOptionsForWindow(win.id);
+                }
+            });
+        });
+    </script>
+    <script>
+        window.GRSAI_STATIC_DEPLOY = true;
+        window.GRSAI_ADMIN_AUDIT_ENDPOINT = '/api/admin/generation-log';
+    </script>
+    <script src="/static/local_gallery.js"></script>
+    <script src="/static/smooth_window_motion.js"></script>
+    <script src="/static/generation_gallery_sidebar.js"></script>
+    <script src="/static/static_pages_bootstrap.js"></script></body>
+</html>
