@@ -161,6 +161,28 @@
                 border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             }
 
+            .generation-gallery-tools {
+                display: flex;
+                gap: 8px;
+                padding: 0 14px 12px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            }
+
+            .generation-gallery-tool-btn {
+                min-height: 32px;
+                flex: 1;
+                border-radius: 7px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                background: rgba(255, 255, 255, 0.055);
+                color: #f2f3f5;
+                cursor: pointer;
+                font-size: 13px;
+            }
+
+            .generation-gallery-tool-btn:hover {
+                background: rgba(255, 255, 255, 0.11);
+            }
+
             .generation-gallery-search {
                 width: 100%;
                 height: 36px;
@@ -536,10 +558,16 @@
                 <div class="generation-gallery-search-wrap">
                     <input class="generation-gallery-search" id="generationGallerySearch" type="search" placeholder="搜索提示词、模型、尺寸、时间...">
                 </div>
+                <div class="generation-gallery-tools">
+                    <button class="generation-gallery-tool-btn" id="generationGalleryCleanup" type="button">清理</button>
+                </div>
                 <div class="generation-gallery-list" id="generationGalleryList"></div>
             `;
             host.appendChild(sidebar);
             sidebar.querySelector('#generationGalleryHide').addEventListener('click', () => setSidebarOpen(false));
+            sidebar.querySelector('#generationGalleryCleanup').addEventListener('click', () => {
+                if (typeof window.openGalleryCleanup === 'function') window.openGalleryCleanup();
+            });
             sidebar.querySelector('#generationGallerySearch').addEventListener('input', event => {
                 window.clearTimeout(debounceTimer);
                 debounceTimer = window.setTimeout(() => {
@@ -944,6 +972,7 @@
             await setSidebarOpen(false);
         };
         window.renderGallery = renderSidebar;
+        window.refreshGenerationGallery = renderSidebar;
         window.showAssetImage = openAssetPreview;
         window.toggleGenerationGallery = () => setSidebarOpen(!sidebarOpen);
     }
@@ -975,6 +1004,10 @@
         } else {
             closeDetail();
         }
+    });
+
+    window.addEventListener('local-gallery-records-changed', () => {
+        renderSidebar().catch(error => console.warn('刷新生成图库失败:', error));
     });
 
     if (document.readyState === 'loading') {

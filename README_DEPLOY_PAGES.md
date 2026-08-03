@@ -52,7 +52,7 @@ GRSAI_AUDIT_FORWARD_URL=https://你的5005公网域名/api/admin/generation-log
 GRSAI_ADMIN_INGEST_TOKEN=同一个token
 ```
 
-注意：Function 不能转发到 `127.0.0.1:5015`，必须转发到公网可访问的 5005 隧道地址。5005 服务会再从本机转发到 5015 管理后台 ingest。
+注意：Function 不能转发到 `127.0.0.1:5006`，必须转发到公网可访问的 5005 Web 服务隧道地址。5005 服务会再从本机转发到 5006 管理后台 ingest。
 
 ## 文件结构
 

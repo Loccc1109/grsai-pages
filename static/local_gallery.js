@@ -5,11 +5,13 @@
     const GRSAI_HOSTS = ['https://grsai.dakka.com.cn', 'https://grsaiapi.com'];
     const GRSAI_POLL_INTERVAL_MS = 5000;
     const GRSAI_POLL_TIMEOUT_MS = 600000;
-    const API_65535_BASE_URL = 'https://img-cn.65535.space/v1';
+    const API_65535_BASE_URL = 'https://sub-proxy-us.65535.space/v1';
+    const CHANGE2PRO_BASE_URL = 'https://api.change2pro.com';
     const objectUrls = new Set();
     const assetUrlCache = new Map();
     const generationRuntime = new Map();
     let galleryFilter = 'all';
+    let galleryCleanupCutoff = null;
     let settingsLoadPromise = null;
 
     function requestToPromise(request) {
@@ -121,6 +123,7 @@
             getGeneration: id => get('generations', id),
             getAllGenerations: () => getAll('generations'),
             putGeneration: generation => put('generations', generation),
+            deleteGeneration: id => remove('generations', id),
             async getSetting(key) {
                 const row = await get('settings', key);
                 return row ? row.value : null;
@@ -325,7 +328,9 @@
                 return this.base64ToBlob(result, fallbackMimeType);
             }
             if (result?.b64_json) return this.base64ToBlob(result.b64_json, result.mimeType || fallbackMimeType);
+            if (result?.data_url) return this.base64ToBlob(result.data_url, result.mimeType || fallbackMimeType);
             if (result?.data) return this.base64ToBlob(result.data, result.mimeType || fallbackMimeType);
+            if (result?.base64) return this.base64ToBlob(result.base64, result.mimeType || fallbackMimeType);
             if (result?.url) return this.fetchImageBlob(result.url, result.mimeType || fallbackMimeType);
             throw new Error('模型返回结果中没有图片数据');
         },
@@ -406,7 +411,20 @@
     const BrowserGenerationClient = {
         async generateImage({ provider, apiKey, prompt, model, imageSize, aspectRatio, referenceHashes, onProviderTask }) {
             if (provider === '65535') {
-                return this.generate65535({ apiKey, prompt, model: 'gpt-image-2-auto', imageSize, referenceHashes });
+                return this.generateOpenAIImages({
+                    apiKey,
+                    prompt,
+                    model: 'gpt-image-2-auto',
+                    imageSize,
+                    referenceHashes,
+                    baseUrl: API_65535_BASE_URL,
+                    imageFieldName: 'image[]',
+                    includeOpenAIOptions: true,
+                    providerLabel: '65535'
+                });
+            }
+            if (provider === 'change2pro') {
+                return this.generateChange2proProxy({ apiKey, prompt, model, imageSize, referenceHashes, onProviderTask });
             }
             const apiModel = model === 'gpt-image-2-grsai' ? 'gpt-image-2-vip' : model;
             return this.generateGrsai({ apiKey, prompt, model: apiModel, imageSize, aspectRatio, referenceHashes, onProviderTask });
@@ -484,7 +502,31 @@
             throw new Error('GRSAI 轮询超时');
         },
 
-        async generate65535({ apiKey, prompt, model, imageSize, referenceHashes }) {
+        async generateChange2proProxy({ apiKey, prompt, model, imageSize, referenceHashes, onProviderTask }) {
+            const assets = await this.getReferenceAssets(referenceHashes);
+            const formData = new FormData();
+            formData.append('api_key_change2pro_gpt', apiKey);
+            formData.append('model', 'gpt-image-2-change2pro');
+            formData.append('prompt', prompt);
+            formData.append('size', imageSize || '1024x1024');
+            formData.append('n', '1');
+            assets.forEach(asset => {
+                const filename = asset.originalName || `${asset.hash}.${ImageAssetService.extensionFromMime(asset.mimeType)}`;
+                formData.append('image', asset.blob, filename);
+            });
+            if (typeof onProviderTask === 'function') {
+                try { onProviderTask({ providerTaskId: '', providerHost: CHANGE2PRO_BASE_URL }); } catch (callbackError) { console.warn('provider task callback failed:', callbackError); }
+            }
+            const result = await this.fetchJson('/api/change2pro/images', {
+                method: 'POST',
+                body: formData
+            });
+            const data = result.data || [];
+            if (!data.length) throw new Error('Change2pro returned an empty result');
+            return Promise.all(data.map(item => ImageAssetService.resultToBlob(item, 'image/jpeg')));
+        },
+
+        async generateOpenAIImages({ apiKey, prompt, model, imageSize, referenceHashes, baseUrl, imageFieldName, includeOpenAIOptions, providerLabel }) {
             let response;
             if (referenceHashes?.length) {
                 const assets = await this.getReferenceAssets(referenceHashes);
@@ -492,29 +534,31 @@
                 formData.append('model', model);
                 formData.append('prompt', prompt);
                 formData.append('size', imageSize || '1024x1024');
-                formData.append('quality', 'auto');
-                formData.append('output_format', 'jpeg');
-                formData.append('moderation', 'auto');
+                if (includeOpenAIOptions) {
+                    formData.append('quality', 'auto');
+                    formData.append('output_format', 'jpeg');
+                    formData.append('moderation', 'auto');
+                }
                 formData.append('n', '1');
                 assets.forEach(asset => {
                     const filename = asset.originalName || `${asset.hash}.${ImageAssetService.extensionFromMime(asset.mimeType)}`;
-                    formData.append('image[]', asset.blob, filename);
+                    formData.append(imageFieldName, asset.blob, filename);
                 });
-                response = await fetch(`${API_65535_BASE_URL}/images/edits`, {
+                response = await fetch(`${baseUrl}/images/edits`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${apiKey}` },
                     body: formData
                 });
             } else {
-                response = await fetch(`${API_65535_BASE_URL}/images/generations`, {
+                response = await fetch(`${baseUrl}/images/generations`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                    body: JSON.stringify({ model, prompt, size: imageSize || '1024x1024', quality: 'auto', output_format: 'jpeg', moderation: 'auto', n: 1 })
+                    body: JSON.stringify(includeOpenAIOptions ? { model, prompt, size: imageSize || '1024x1024', quality: 'auto', output_format: 'jpeg', moderation: 'auto', n: 1 } : { model, prompt, size: imageSize || '1024x1024', n: 1 })
                 });
             }
             const result = await this.parseResponse(response);
             const data = result.data || [];
-            if (!data.length) throw new Error('65535 返回结果为空');
+            if (!data.length) throw new Error(`${providerLabel || 'Provider'} returned an empty result`);
             return Promise.all(data.map(item => ImageAssetService.resultToBlob(item, 'image/jpeg')));
         },
 
@@ -530,13 +574,17 @@
                 const message = typeof payload === 'string' ? payload : (payload.error?.message || payload.error || payload.msg || JSON.stringify(payload));
                 throw new Error(message || `请求失败 (${response.status})`);
             }
+            if (payload && typeof payload === 'object' && payload.success === false) {
+                const message = payload.error?.message || payload.error || payload.msg || JSON.stringify(payload);
+                throw new Error(message || '请求失败');
+            }
             return payload;
         },
 
         extractImageResults(data) {
             if (Array.isArray(data?.results) && data.results.length) return data.results;
             if (Array.isArray(data?.data) && data.data.length) return data.data;
-            if (data?.url || data?.b64_json || data?.data) return [data];
+            if (data?.url || data?.b64_json || data?.data || data?.data_url || data?.base64) return [data];
             throw new Error('模型返回结果中没有图片');
         },
 
@@ -578,6 +626,7 @@
                             <button class="gallery-filter-btn" data-filter="generation" onclick="setGalleryFilter('generation')">生成图</button>
                         </div>
                         <div class="gallery-card-meta" id="galleryStats">0 张</div>
+                        <button class="gallery-filter-btn gallery-cleanup-open" type="button" onclick="openGalleryCleanup()">管理删除</button>
                     </div>
                     <div id="galleryGrid" class="gallery-grid"></div>
                 </div>
@@ -596,6 +645,344 @@
     function closeGallery() {
         const modal = document.getElementById('galleryModal');
         if (modal) modal.classList.remove('active');
+    }
+
+    function ensureGalleryCleanupStyles() {
+        if (document.getElementById('galleryCleanupStyles')) return;
+        const style = document.createElement('style');
+        style.id = 'galleryCleanupStyles';
+        style.textContent = `
+            .gallery-cleanup-content {
+                width: min(560px, 94vw);
+                max-width: 560px;
+                max-height: 86vh;
+            }
+
+            .gallery-cleanup-body {
+                display: grid;
+                gap: 14px;
+            }
+
+            .gallery-cleanup-field {
+                display: grid;
+                gap: 8px;
+            }
+
+            .gallery-cleanup-field label {
+                color: var(--text);
+                font-size: 13px;
+                font-weight: 600;
+            }
+
+            .gallery-cleanup-input {
+                height: 38px;
+                border-radius: 8px;
+                border: 1px solid var(--line);
+                background: rgba(255, 255, 255, 0.06);
+                color: var(--text);
+                padding: 0 10px;
+                outline: none;
+            }
+
+            .gallery-cleanup-preview {
+                min-height: 76px;
+                padding: 12px;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.045);
+                color: var(--muted);
+                font-size: 13px;
+                line-height: 1.65;
+            }
+
+            .gallery-cleanup-preview strong {
+                color: var(--text);
+            }
+
+            .gallery-cleanup-quick {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+            }
+
+            .gallery-cleanup-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: 10px;
+                margin-top: 2px;
+            }
+
+            .gallery-cleanup-danger {
+                color: #ffb4bd;
+                border-color: rgba(255, 107, 122, 0.45);
+            }
+
+            @media (max-width: 560px) {
+                .gallery-cleanup-quick {
+                    grid-template-columns: 1fr;
+                }
+
+                .gallery-cleanup-actions {
+                    flex-direction: column-reverse;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function ensureGalleryCleanupShell() {
+        ensureGalleryCleanupStyles();
+        if (document.getElementById('galleryCleanupModal')) return;
+        const modal = document.createElement('div');
+        modal.id = 'galleryCleanupModal';
+        modal.className = 'settings-modal';
+        modal.innerHTML = `
+            <div class="settings-content gallery-cleanup-content" onclick="event.stopPropagation()">
+                <div class="settings-header">
+                    <div class="settings-title">本地图库清理</div>
+                    <button class="close-settings" type="button" id="galleryCleanupClose">×</button>
+                </div>
+                <div class="gallery-cleanup-body">
+                    <div class="gallery-cleanup-field">
+                        <label for="galleryCleanupCutoff">删除保存时间早于此时间的记录</label>
+                        <input class="gallery-cleanup-input" id="galleryCleanupCutoff" type="datetime-local">
+                    </div>
+                    <div class="gallery-cleanup-preview" id="galleryCleanupPreview">请选择时间</div>
+                    <div class="gallery-cleanup-quick">
+                        <button class="gallery-filter-btn" type="button" data-cleanup-quick="7d">7天前的所有</button>
+                        <button class="gallery-filter-btn" type="button" data-cleanup-quick="1m">一个月前的所有</button>
+                        <button class="gallery-filter-btn" type="button" data-cleanup-quick="3m">三个月前的所有</button>
+                        <button class="gallery-filter-btn gallery-cleanup-danger" type="button" data-cleanup-quick="all">全部</button>
+                    </div>
+                    <div class="gallery-cleanup-actions">
+                        <button class="gallery-action-btn" type="button" id="galleryCleanupCancel">取消</button>
+                        <button class="gallery-action-btn gallery-cleanup-danger" type="button" id="galleryCleanupDelete">永久删除</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        modal.addEventListener('click', event => { if (event.target === modal) closeGalleryCleanup(); });
+        modal.querySelector('#galleryCleanupClose').addEventListener('click', closeGalleryCleanup);
+        modal.querySelector('#galleryCleanupCancel').addEventListener('click', closeGalleryCleanup);
+        modal.querySelector('#galleryCleanupDelete').addEventListener('click', () => deleteGalleryRecordsBeforeCutoff().catch(error => showToast(`清理失败：${error.message}`, 'error')));
+        modal.querySelector('#galleryCleanupCutoff').addEventListener('input', event => {
+            galleryCleanupCutoff = parseGalleryCleanupInput(event.target.value);
+            previewGalleryCleanup().catch(error => showToast(`统计失败：${error.message}`, 'error'));
+        });
+        modal.querySelectorAll('[data-cleanup-quick]').forEach(button => {
+            button.addEventListener('click', () => applyGalleryCleanupQuickSelect(button.dataset.cleanupQuick));
+        });
+        document.body.appendChild(modal);
+    }
+
+    async function openGalleryCleanup() {
+        ensureGalleryCleanupShell();
+        document.getElementById('galleryCleanupModal').classList.add('active');
+        if (!galleryCleanupCutoff) applyGalleryCleanupQuickSelect('1m');
+        else await previewGalleryCleanup();
+    }
+
+    function closeGalleryCleanup() {
+        const modal = document.getElementById('galleryCleanupModal');
+        if (modal) modal.classList.remove('active');
+    }
+
+    function parseGalleryCleanupInput(value) {
+        if (!value) return null;
+        const time = new Date(value).getTime();
+        return Number.isFinite(time) ? time : null;
+    }
+
+    function formatDateTimeInput(time) {
+        const date = new Date(time);
+        const pad = value => String(value).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function formatCleanupTime(time) {
+        if (time === Number.POSITIVE_INFINITY) return '全部记录';
+        const date = new Date(time);
+        const pad = value => String(value).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function applyGalleryCleanupQuickSelect(kind) {
+        const input = document.getElementById('galleryCleanupCutoff');
+        const date = new Date();
+        if (kind === 'all') {
+            galleryCleanupCutoff = Number.POSITIVE_INFINITY;
+            if (input) input.value = '';
+        } else {
+            if (kind === '7d') date.setDate(date.getDate() - 7);
+            else if (kind === '3m') date.setMonth(date.getMonth() - 3);
+            else date.setMonth(date.getMonth() - 1);
+            galleryCleanupCutoff = date.getTime();
+            if (input) input.value = formatDateTimeInput(galleryCleanupCutoff);
+        }
+        previewGalleryCleanup().catch(error => showToast(`统计失败：${error.message}`, 'error')); 
+    }
+
+    function getRecordTimestamp(record, fields) {
+        for (const field of fields) {
+            const value = record?.[field];
+            if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+            if (typeof value === 'string' && value.trim()) {
+                const parsed = Date.parse(value);
+                if (Number.isFinite(parsed) && parsed > 0) return parsed;
+            }
+        }
+        return 0;
+    }
+
+    function getAssetSavedAt(asset) {
+        return getRecordTimestamp(asset, ['createdAt', 'savedAt', 'created_at', 'updatedAt']);
+    }
+
+    function getGenerationSavedAt(generation) {
+        return getRecordTimestamp(generation, ['createdAt', 'created_at', 'completedAt', 'completed_at', 'updatedAt']);
+    }
+
+    function shouldCleanupRecord(time, cutoff) {
+        if (cutoff === Number.POSITIVE_INFINITY) return true;
+        return Boolean(time) && time < cutoff;
+    }
+
+    function getAssetStorageSize(asset) {
+        const originalSize = asset?.blob?.size || asset?.size || 0;
+        const thumbSize = asset?.thumbBlob?.size || 0;
+        return originalSize + thumbSize;
+    }
+
+    async function getGalleryCleanupCandidates(cutoff) {
+        if (!cutoff) return { assets: [], generations: [], assetBytes: 0, unknownAssets: 0, unknownGenerations: 0 };
+        const [assets, generations] = await Promise.all([
+            LocalGalleryDB.getAllAssets(),
+            LocalGalleryDB.getAllGenerations()
+        ]);
+        const selectedAssets = [];
+        const selectedGenerations = [];
+        let assetBytes = 0;
+        let unknownAssets = 0;
+        let unknownGenerations = 0;
+
+        assets.forEach(asset => {
+            const time = getAssetSavedAt(asset);
+            if (!shouldCleanupRecord(time, cutoff)) return;
+            selectedAssets.push(asset);
+            assetBytes += getAssetStorageSize(asset);
+            if (!time) unknownAssets += 1;
+        });
+
+        generations.forEach(generation => {
+            const time = getGenerationSavedAt(generation);
+            if (!shouldCleanupRecord(time, cutoff)) return;
+            selectedGenerations.push(generation);
+            if (!time) unknownGenerations += 1;
+        });
+
+        return { assets: selectedAssets, generations: selectedGenerations, assetBytes, unknownAssets, unknownGenerations };
+    }
+
+    async function previewGalleryCleanup() {
+        const preview = document.getElementById('galleryCleanupPreview');
+        const deleteButton = document.getElementById('galleryCleanupDelete');
+        if (!preview) return;
+        if (!galleryCleanupCutoff) {
+            preview.textContent = '请选择一个截止时间，或使用底部快捷选项。';
+            if (deleteButton) deleteButton.disabled = true;
+            return;
+        }
+        const stats = await getGalleryCleanupCandidates(galleryCleanupCutoff);
+        const total = stats.assets.length + stats.generations.length;
+        const rangeText = galleryCleanupCutoff === Number.POSITIVE_INFINITY
+            ? '全部本地图库记录'
+            : `保存时间早于 ${formatCleanupTime(galleryCleanupCutoff)} 的记录`; 
+        const unknownText = stats.unknownAssets || stats.unknownGenerations
+            ? `<br>其中无时间记录 ${stats.unknownAssets} 张图片、${stats.unknownGenerations} 条生成记录。`
+            : ''; 
+        preview.innerHTML = `将永久删除 <strong>${stats.assets.length}</strong> 张图片和 <strong>${stats.generations.length}</strong> 条生成记录。<br>${escapeHtml(rangeText)}<br>预计释放约 <strong>${formatBytes(stats.assetBytes)}</strong>${unknownText}`;
+        if (deleteButton) deleteButton.disabled = total === 0;
+    }
+
+    function removeDeletedAssetsFromWindows(hashSet) {
+        if (!hashSet || !hashSet.size) return;
+        Object.values(windows).forEach(win => {
+            const before = (win.referenceImageItems || []).length;
+            win.referenceImageItems = (win.referenceImageItems || []).filter(item => !hashSet.has(item.assetHash));
+            if (before !== win.referenceImageItems.length) {
+                syncReferenceImages(win);
+                updateRefPreview(win.id);
+            }
+        });
+    }
+
+    async function refreshGallerySurfaces() {
+        await renderGallery();
+        window.dispatchEvent(new CustomEvent('local-gallery-records-changed')); 
+    }
+
+    async function deleteGalleryRecordsBeforeCutoff() {
+        if (!galleryCleanupCutoff) {
+            showToast('请先选择要删除的时间范围', 'info');
+            return;
+        }
+        const stats = await getGalleryCleanupCandidates(galleryCleanupCutoff);
+        const total = stats.assets.length + stats.generations.length;
+        if (!total) {
+            showToast('当前时间范围内没有可删除记录', 'info');
+            return;
+        }
+        const rangeText = galleryCleanupCutoff === Number.POSITIVE_INFINITY ? '全部本地图库记录' : `保存时间早于 ${formatCleanupTime(galleryCleanupCutoff)} 的记录`; 
+        const message = `将永久删除 ${stats.assets.length} 张图片和 ${stats.generations.length} 条生成记录。\n范围：${rangeText}\n预计释放约 ${formatBytes(stats.assetBytes)}。\n\n删除后无法恢复，确定继续吗？`; 
+        if (!confirm(message)) return;
+
+        const deleteButton = document.getElementById('galleryCleanupDelete');
+        if (deleteButton) {
+            deleteButton.disabled = true;
+            deleteButton.textContent = '删除中...';
+        }
+
+        const deletedHashes = new Set();
+        let deletedAssets = 0;
+        let deletedGenerations = 0;
+        const failures = [];
+        let cleanupPreviewRefreshed = false;
+
+        try {
+        for (const asset of stats.assets) {
+            try {
+                await LocalGalleryDB.deleteAsset(asset.hash);
+                ImageAssetService.revokeAssetUrls(asset.hash);
+                deletedHashes.add(asset.hash);
+                deletedAssets += 1;
+            } catch (error) {
+                failures.push(`图片 ${asset.hash ? asset.hash.slice(0, 12) : '未知'}：${error.message}`);
+            }
+        }
+
+        for (const generation of stats.generations) {
+            try {
+                await LocalGalleryDB.deleteGeneration(generation.id);
+                deletedGenerations += 1;
+            } catch (error) {
+                failures.push(`生成记录 ${generation.id || '未知'}：${error.message}`);
+            }
+        }
+
+        removeDeletedAssetsFromWindows(deletedHashes);
+        await refreshGallerySurfaces();
+        await previewGalleryCleanup();
+        cleanupPreviewRefreshed = true;
+
+        const result = `清理完成：成功删除 ${deletedAssets} 张图片、${deletedGenerations} 条生成记录，失败 ${failures.length} 条`; 
+        showToast(result, failures.length ? 'error' : 'success');
+        if (failures.length) console.warn('本地图库清理部分失败:', failures);
+        } finally {
+            if (deleteButton) {
+                deleteButton.textContent = '永久删除';
+                if (!cleanupPreviewRefreshed) deleteButton.disabled = false;
+            }
+        }
     }
 
     async function setGalleryFilter(filter) {
@@ -987,6 +1374,14 @@
         await settingsLoadPromise;
     }
 
+    function resolveEnabledModels(savedEnabledModels, useSavedSelection = false) {
+        const validSavedModels = Array.isArray(savedEnabledModels)
+            ? savedEnabledModels.filter(model => AVAILABLE_MODELS.includes(model))
+            : [];
+        if (!useSavedSelection || !validSavedModels.length) return [...AVAILABLE_MODELS];
+        return validSavedModels;
+    }
+
     function loadSettings() {
         if (settingsLoadPromise) return settingsLoadPromise;
         enabledModels = [...AVAILABLE_MODELS];
@@ -1005,12 +1400,14 @@
                 }
                 globalConfig = saved || {};
                 document.getElementById('apiKey').value = globalConfig.apiKey || '';
-                document.getElementById('apiKey65535').value = globalConfig.apiKey65535 || '';
+                const apiKey65535Input = document.getElementById('apiKey65535');
+                if (apiKey65535Input) apiKey65535Input.value = globalConfig.apiKey65535 || globalConfig.apiKey_65535 || '';
+                document.getElementById('apiKeyChange2pro').value = globalConfig.apiKeyChange2pro || '';
                 document.getElementById('outputDir').value = globalConfig.outputDir || 'outputs';
                 document.getElementById('filenamePrefix').value = globalConfig.filenamePrefix || 'grsai';
                 document.getElementById('concurrentLimit').value = globalConfig.concurrentLimit || 5;
-                enabledModels = (globalConfig.enabledModels || AVAILABLE_MODELS).filter(model => AVAILABLE_MODELS.includes(model));
-                if (!enabledModels.length) enabledModels = [...AVAILABLE_MODELS];
+                const savedEnabledModels = Array.isArray(globalConfig.enabledModels) ? globalConfig.enabledModels : null;
+                enabledModels = resolveEnabledModels(savedEnabledModels, Boolean(globalConfig.modelSelectionExplicit));
                 renderModelConfigList();
                 Object.values(windows).forEach(win => win.element && renderModelOptionsForWindow(win.id));
             } catch (error) {
@@ -1026,11 +1423,13 @@
     async function saveSettings() {
         globalConfig = {
             apiKey: document.getElementById('apiKey').value,
-            apiKey65535: document.getElementById('apiKey65535').value,
+            apiKey65535: document.getElementById('apiKey65535')?.value || '',
+            apiKeyChange2pro: document.getElementById('apiKeyChange2pro').value,
             outputDir: document.getElementById('outputDir').value,
             filenamePrefix: document.getElementById('filenamePrefix').value,
             concurrentLimit: document.getElementById('concurrentLimit').value,
             enabledModels: enabledModels.filter(model => AVAILABLE_MODELS.includes(model)),
+            modelSelectionExplicit: Boolean(globalConfig.modelSelectionExplicit),
             grsaiHost: globalConfig.grsaiHost
         };
         try {
@@ -1048,19 +1447,29 @@
         if (!win) return;
         const selectedModel = document.getElementById(`model-${windowId}`).value;
         const is65535Model = selectedModel === 'gpt-image-2-65535';
+        const isChange2proModel = selectedModel === 'gpt-image-2-change2pro';
         const usesMappedImageSize = isGptImageModel(selectedModel);
         const selectedImageSize = getFixedBananaModelSize(selectedModel) || win.selectedSize;
-        const mappedImageSize = usesMappedImageSize ? getOpenAIImageSize(selectedImageSize, win.selectedRatio) : selectedImageSize;
+        const selectedAspectRatio = win.selectedRatio;
+        const mappedImageSize = usesMappedImageSize
+            ? getOpenAIImageSize(selectedImageSize, selectedAspectRatio)
+            : selectedImageSize;
         const grsaiApiKey = globalConfig.apiKey || document.getElementById('apiKey').value.trim();
-        const apiKey65535 = globalConfig.apiKey65535 || document.getElementById('apiKey65535').value.trim();
+        const apiKey65535 = globalConfig.apiKey65535 || document.getElementById('apiKey65535')?.value.trim() || '';
+        const apiKeyChange2pro = globalConfig.apiKeyChange2pro || document.getElementById('apiKeyChange2pro').value.trim();
 
-        if (!is65535Model && !grsaiApiKey) {
-            showToast('请先在设置中配置 GRSAI API Key', 'error');
+        if (is65535Model && !apiKey65535) {
+            showToast('Please configure 65535 API Key in settings first.', 'error');
             openSettings();
             return;
         }
-        if (is65535Model && !apiKey65535) {
-            showToast('请先在设置中配置 65535 API Key', 'error');
+        if (isChange2proModel && !apiKeyChange2pro) {
+            showToast('Please configure Change2pro API Key in settings first.', 'error');
+            openSettings();
+            return;
+        }
+        if (!is65535Model && !isChange2proModel && !grsaiApiKey) {
+            showToast('Please configure GRSAI API Key in settings first.', 'error');
             openSettings();
             return;
         }
@@ -1085,7 +1494,7 @@
             prompt,
             model: selectedModel,
             imageSize: mappedImageSize,
-            aspectRatio: usesMappedImageSize ? mappedImageSize : win.selectedRatio,
+            aspectRatio: usesMappedImageSize ? mappedImageSize : selectedAspectRatio,
             referenceHashes,
             resultHashes: [],
             error: '',
@@ -1104,10 +1513,10 @@
         const generateBtn = document.getElementById(`generateBtn-${windowId}`);
         generateBtn.classList.add('loading');
 
-        const provider = is65535Model ? '65535' : 'grsai';
-        const apiKey = is65535Model ? apiKey65535 : grsaiApiKey;
+        const provider = is65535Model ? '65535' : (isChange2proModel ? 'change2pro' : 'grsai');
+        const apiKey = is65535Model ? apiKey65535 : (isChange2proModel ? apiKeyChange2pro : grsaiApiKey);
         const concurrent = Math.max(1, Math.min(count, parseInt(globalConfig.concurrentLimit, 10) || 1));
-        const auditAspectRatio = usesMappedImageSize ? mappedImageSize : win.selectedRatio;
+        const auditAspectRatio = usesMappedImageSize ? mappedImageSize : selectedAspectRatio;
         let cursor = 0;
 
         async function worker() {
@@ -1261,6 +1670,8 @@
         window.AdminAuditClient = AdminAuditClient;
         window.openGallery = openGallery;
         window.closeGallery = closeGallery;
+        window.openGalleryCleanup = openGalleryCleanup;
+        window.closeGalleryCleanup = closeGalleryCleanup;
         window.setGalleryFilter = setGalleryFilter;
         window.renderGallery = renderGallery;
         window.showAssetImage = showAssetImage;
