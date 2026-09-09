@@ -1374,12 +1374,14 @@
         await settingsLoadPromise;
     }
 
-    function resolveEnabledModels(savedEnabledModels, useSavedSelection = false) {
+    function resolveEnabledModels(savedEnabledModels, useSavedSelection = false, migrateGptImage25 = false) {
         const validSavedModels = Array.isArray(savedEnabledModels)
             ? savedEnabledModels.filter(model => AVAILABLE_MODELS.includes(model))
             : [];
         if (!useSavedSelection || !validSavedModels.length) return [...AVAILABLE_MODELS];
-        return validSavedModels;
+        if (!migrateGptImage25) return validSavedModels;
+        const migratedModels = new Set([...validSavedModels, ...GPT_IMAGE_25_MODELS]);
+        return AVAILABLE_MODELS.filter(model => migratedModels.has(model));
     }
 
     function loadSettings() {
@@ -1406,8 +1408,11 @@
                 document.getElementById('outputDir').value = globalConfig.outputDir || 'outputs';
                 document.getElementById('filenamePrefix').value = globalConfig.filenamePrefix || 'grsai';
                 document.getElementById('concurrentLimit').value = globalConfig.concurrentLimit || 5;
-                const savedEnabledModels = Array.isArray(globalConfig.enabledModels) ? globalConfig.enabledModels : null;
-                enabledModels = resolveEnabledModels(savedEnabledModels, Boolean(globalConfig.modelSelectionExplicit));
+                const savedEnabledModels = globalConfig.enabledModels;
+                const useSavedSelection = Boolean(globalConfig.modelSelectionExplicit);
+                const migrateGptImage25 = useSavedSelection && !globalConfig.gptImage25ModelsMigrated;
+                enabledModels = resolveEnabledModels(savedEnabledModels, useSavedSelection, migrateGptImage25);
+                if (migrateGptImage25) globalConfig.gptImage25ModelsMigrated = true;
                 renderModelConfigList();
                 Object.values(windows).forEach(win => win.element && renderModelOptionsForWindow(win.id));
             } catch (error) {
@@ -1430,6 +1435,7 @@
             concurrentLimit: document.getElementById('concurrentLimit').value,
             enabledModels: enabledModels.filter(model => AVAILABLE_MODELS.includes(model)),
             modelSelectionExplicit: Boolean(globalConfig.modelSelectionExplicit),
+            gptImage25ModelsMigrated: true,
             grsaiHost: globalConfig.grsaiHost
         };
         try {

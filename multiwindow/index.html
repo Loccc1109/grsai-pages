@@ -1500,6 +1500,8 @@
             "gpt-image-2-65535",
             "gpt-image-2-change2pro",
             "gpt-image-2-grsai",
+            "gpt-image-2.5-sunburst",
+            "gpt-image-2.5-flare",
             "nano-banana-2",
             "nano-banana-2-cl",
             "nano-banana-2-2k-cl",
@@ -1515,8 +1517,12 @@
             "nano-banana-pro": "nano-banana-pro[grsai]",
             "gpt-image-2-65535": "gpt-image-2[65535]",
             "gpt-image-2-grsai": "gpt-image-2[grsai]",
+            "gpt-image-2.5-sunburst": "gpt-image-2.5-sunburst[grsai]",
+            "gpt-image-2.5-flare": "gpt-image-2.5-flare[grsai]",
             "gpt-image-2-change2pro": "gpt-image-2[Change2pro]"
         };
+
+        const GPT_IMAGE_25_MODELS = ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare"];
 
         function getModelLabel(model) {
             return MODEL_LABELS[model] || model;
@@ -1545,7 +1551,20 @@
         }
 
         function isGptImageModel(model) {
-            return model === 'gpt-image-2-65535' || model === 'gpt-image-2-change2pro' || model === 'gpt-image-2-grsai';
+            return model === 'gpt-image-2-65535'
+                || model === 'gpt-image-2-change2pro'
+                || model === 'gpt-image-2-grsai'
+                || GPT_IMAGE_25_MODELS.includes(model);
+        }
+
+        function resolveEnabledModels(savedEnabledModels, useSavedSelection = false, migrateGptImage25 = false) {
+            const validSavedModels = Array.isArray(savedEnabledModels)
+                ? savedEnabledModels.filter(model => AVAILABLE_MODELS.includes(model))
+                : [];
+            if (!useSavedSelection || !validSavedModels.length) return [...AVAILABLE_MODELS];
+            if (!migrateGptImage25) return validSavedModels;
+            const migratedModels = new Set([...validSavedModels, ...GPT_IMAGE_25_MODELS]);
+            return AVAILABLE_MODELS.filter(model => migratedModels.has(model));
         }
 
         const FIXED_BANANA_MODEL_SIZES = {
@@ -2709,7 +2728,8 @@
                 filenamePrefix: document.getElementById('filenamePrefix').value,
                 concurrentLimit: document.getElementById('concurrentLimit').value,
                 enabledModels: enabledModels.filter(model => AVAILABLE_MODELS.includes(model)),
-                modelSelectionExplicit: Boolean(globalConfig.modelSelectionExplicit)
+                modelSelectionExplicit: Boolean(globalConfig.modelSelectionExplicit),
+                gptImage25ModelsMigrated: true
             };
             
             localStorage.setItem('grsai_multiwindow_config', JSON.stringify(globalConfig));
@@ -2742,12 +2762,11 @@
                     document.getElementById('filenamePrefix').value = globalConfig.filenamePrefix || 'grsai';
                     document.getElementById('concurrentLimit').value = globalConfig.concurrentLimit || 5;
                     
-                    const savedEnabledModels = Array.isArray(globalConfig.enabledModels)
-                        ? globalConfig.enabledModels.filter(model => AVAILABLE_MODELS.includes(model))
-                        : [];
-                    enabledModels = globalConfig.modelSelectionExplicit && savedEnabledModels.length
-                        ? savedEnabledModels
-                        : [...AVAILABLE_MODELS];
+                    const savedEnabledModels = globalConfig.enabledModels;
+                    const useSavedSelection = Boolean(globalConfig.modelSelectionExplicit);
+                    const migrateGptImage25 = useSavedSelection && !globalConfig.gptImage25ModelsMigrated;
+                    enabledModels = resolveEnabledModels(savedEnabledModels, useSavedSelection, migrateGptImage25);
+                    if (migrateGptImage25) globalConfig.gptImage25ModelsMigrated = true;
                 } catch (e) {
                     console.error('加载配置失败:', e);
                     enabledModels = [...AVAILABLE_MODELS];

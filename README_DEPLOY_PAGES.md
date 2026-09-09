@@ -36,6 +36,7 @@ http://localhost:8080/multiwindow
 - 参考图和生成图仍保存在用户浏览器 IndexedDB。
 - 生成请求仍由浏览器直连模型 API。
 - 当前静态包通过 Cloudflare Pages Function 代理 `/api/admin/generation-log` 审计上报。
+- 静态版 Change2pro 生图通过 Cloudflare Pages Function 代理 `/api/change2pro/images`。
 - API Key 仍只保存在用户浏览器本地配置中。
 
 ## Pages Function 审计代理配置
@@ -67,4 +68,5 @@ dist_pages/
     generation_gallery_sidebar.js
     static_pages_bootstrap.js
   functions/api/admin/generation-log.js
+  functions/api/change2pro/images.js
 ```
